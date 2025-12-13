@@ -1,0 +1,89 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Book {
+  id Int @id @default(autoincrement())
+  title String
+  description String?
+}
+
+enum UserRole {
+  STUDENT
+  TEACHER
+  ADMINISTRATOR
+  PARENT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  DROPPED
+}
+
+model User {
+  id          String    @id @default(uuid())
+  email       String    @unique
+  password    String
+  firstName   String
+  lastName    String
+  role        UserRole  @default(STUDENT)
+  isVerified  Boolean   @default(false)
+  phone       String?   @unique
+  avatar      String?
+  gender      Gender?
+  dateOfBirth DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // These fields are for future relationships, but the User model itself is complete
+  // coursesTaught   Course[]  @relation("TeacherCourses") // For Teachers
+  enrollments     Enrollment[]                         // For Students
+  taughtCourses Course[] @relation("TeacherCourses")
+  // children        StudentParent[] @relation("ParentLink") // For Parents
+  // parentsLink     StudentParent[] @relation("StudentLink")  // For Students
+  // submissions     Submission[]                         // For Students
+  // ... other links
+}
+
+
+model Enrollment {
+  id         String   @id @default(uuid())
+  studentId  String
+  courseId   String
+  status     EnrollmentStatus @default(ACTIVE)
+  enrolledAt DateTime @default(now())
+
+  // Relations
+  student    User     @relation(fields: [studentId], references: [id])
+  course     Course   @relation(fields: [courseId], references: [id])
+}
+
+model Course {
+  id           String        @id @default(uuid())
+  title        String
+  description  String?
+  teacherId    String?
+
+  // Relations
+  teacher      User?         @relation("TeacherCourses", fields: [teacherId], references: [id])
+  enrollments  Enrollment[]
+}
