@@ -22,6 +22,12 @@ jobs:
           --health-interval=5s
           --health-timeout=5s
           --health-retries=5
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb?schema=public
+      DIRECT_URL: postgresql://testuser:testpass@localhost:5432/testdb?schema=public
+      JWT_SECRET: jwt-scret
+      GOOGLE_CLIENT_ID: CLIENT_ID
 
     steps:
       - name: Checkout code
@@ -37,14 +43,6 @@ jobs:
 
       - name: Install dependencies
         run: yarn install --ignore-scripts
-
-      - name: Copy env file
-        run: cp .env.test.example .env.test
-
-        env:
-          NODE_ENV: test
-          DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb?schema=public
-          DIRECT_URL: postgresql://testuser:testpass@localhost:5432/testdb?schema=public
 
       - name: Generate Prisma code
         run: yarn prisma:generate
