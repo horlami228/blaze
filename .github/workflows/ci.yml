@@ -48,7 +48,7 @@ jobs:
         run: yarn prisma:generate
 
       - name: Run migrations
-        run: yarn:prisma:migrate:dev
+        run: yarn prisma:migrate:dev
 
       - name: Run tests
         run: yarn test
