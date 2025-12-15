@@ -3,7 +3,13 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 // Load environment-specific file
-const envFile = process.env.NODE_ENV === 'prod' ? '.env.prod' : '.env.dev';
+
+const envFile =
+  process.env.NODE_ENV === 'prod'
+    ? '.env.prod'
+    : process.env.NODE_ENV === 'test'
+      ? '.env.test'
+      : '.env.dev';
 
 dotenv.config({ path: path.resolve(__dirname, `./${envFile}`) });
 
