@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Google OAuth Token Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 50px auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #333;
+        margin-bottom: 20px;
+      }
+      .config {
+        margin-bottom: 20px;
+        padding: 15px;
+        background: #f9f9f9;
+        border-radius: 4px;
+      }
+      .config label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+        color: #555;
+      }
+      .config input {
+        width: 100%;
+        padding: 8px;
+        margin-bottom: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+      }
+      button {
+        background-color: #4285f4;
+        color: white;
+        padding: 12px 24px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        margin-right: 10px;
+        margin-bottom: 10px;
+      }
+      button:hover {
+        background-color: #357ae8;
+      }
+      button:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+      }
+      .result {
+        margin-top: 20px;
+        padding: 15px;
+        border-radius: 4px;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+      .success {
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        color: #155724;
+      }
+      .error {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        color: #721c24;
+      }
+      .info {
+        background-color: #d1ecf1;
+        border: 1px solid #bee5eb;
+        color: #0c5460;
+      }
+      .token-display {
+        margin-top: 10px;
+        padding: 10px;
+        background: #f9f9f9;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 12px;
+        max-height: 200px;
+        overflow-y: auto;
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Google OAuth Token Test</h1>
+
+      <div class="config">
+        <label for="apiUrl">API Base URL:</label>
+        <input
+          type="text"
+          id="apiUrl"
+          value="http://localhost:3000"
+          placeholder="http://localhost:3000"
+        />
+
+        <label for="clientId">Google Client ID:</label>
+        <input
+          type="text"
+          id="clientId"
+          placeholder="Enter your Google Client ID"
+        />
+      </div>
+
+      <button id="signInBtn" onclick="signIn()">
+        Sign in with Google (One-Tap)
+      </button>
+      <div id="googleButton" style="margin: 10px 0"></div>
+      <button id="testBtn" onclick="testToken()" disabled>
+        Test Token with Backend
+      </button>
+      <button onclick="clearResults()">Clear Token & Results</button>
+      <div
+        id="status"
+        style="margin-top: 10px; font-size: 12px; color: #666"
+      ></div>
+
+      <div id="result"></div>
+    </div>
+
+    <!-- Google Identity Services library -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+    <script>
+      let idToken = null;
+      const GOOGLE_CLIENT_ID_PLACEHOLDER = 'YOUR_GOOGLE_CLIENT_ID';
+      const STORAGE_KEYS = {
+        TOKEN: 'google_oauth_token',
+        CLIENT_ID: 'google_client_id',
+        API_URL: 'api_url',
+      };
+
+      // Load saved values from localStorage
+      function loadSavedValues() {
+        const savedClientId = localStorage.getItem(STORAGE_KEYS.CLIENT_ID);
+        const savedApiUrl = localStorage.getItem(STORAGE_KEYS.API_URL);
+        const savedToken = localStorage.getItem(STORAGE_KEYS.TOKEN);
+
+        if (savedClientId) {
+          document.getElementById('clientId').value = savedClientId;
+        }
+        if (savedApiUrl) {
+          document.getElementById('apiUrl').value = savedApiUrl;
+        }
+        if (savedToken) {
+          idToken = savedToken;
+          document.getElementById('testBtn').disabled = false;
+          displayResult(
+            'Token restored from previous session. You can test it with the backend.',
+            'success',
+          );
+        }
+      }
+
+      // Save values to localStorage
+      function saveClientId() {
+        const clientId = document.getElementById('clientId').value;
+        if (clientId && clientId !== GOOGLE_CLIENT_ID_PLACEHOLDER) {
+          localStorage.setItem(STORAGE_KEYS.CLIENT_ID, clientId);
+        }
+      }
+
+      function saveApiUrl() {
+        const apiUrl = document.getElementById('apiUrl').value;
+        if (apiUrl) {
+          localStorage.setItem(STORAGE_KEYS.API_URL, apiUrl);
+        }
+      }
+
+      function saveToken(token) {
+        if (token) {
+          localStorage.setItem(STORAGE_KEYS.TOKEN, token);
+        }
+      }
+
+      function displayResult(message, type = 'info') {
+        const resultDiv = document.getElementById('result');
+        resultDiv.className = `result ${type}`;
+        resultDiv.textContent = message;
+      }
+
+      function clearResults() {
+        document.getElementById('result').textContent = '';
+        idToken = null;
+        localStorage.removeItem(STORAGE_KEYS.TOKEN);
+        document.getElementById('testBtn').disabled = true;
+        const statusDiv = document.getElementById('status');
+        statusDiv.textContent = 'Token cleared. Please sign in again.';
+        statusDiv.style.color = '#666';
+      }
+
+      function signIn() {
+        const clientId = document.getElementById('clientId').value;
+
+        if (!clientId || clientId === GOOGLE_CLIENT_ID_PLACEHOLDER) {
+          displayResult(
+            'Please enter your Google Client ID in the configuration section.',
+            'error',
+          );
+          return;
+        }
+
+        // Initialize Google Identity Services
+        google.accounts.id.initialize({
+          client_id: clientId,
+          callback: handleCredentialResponse,
+        });
+
+        // Trigger the sign-in flow
+        google.accounts.id.prompt((notification) => {
+          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+            // If one-tap is not available, show a button
+            displayResult(
+              'One-tap sign-in not available. Please use the button below or check your browser settings.',
+              'info',
+            );
+          }
+        });
+      }
+
+      function handleCredentialResponse(response) {
+        if (response.credential) {
+          idToken = response.credential;
+          saveToken(idToken); // Save to localStorage
+          document.getElementById('testBtn').disabled = false;
+
+          const statusDiv = document.getElementById('status');
+          statusDiv.textContent = '✓ Token saved and ready to use';
+          statusDiv.style.color = '#28a745';
+
+          // Display token preview (first 50 chars)
+          const tokenPreview = idToken.substring(0, 50) + '...';
+          displayResult(
+            'Google Sign-In successful! Token received and saved.\n\nToken preview: ' +
+              tokenPreview +
+              '\n\nClick "Test Token with Backend" to verify with your API.',
+            'success',
+          );
+        } else {
+          displayResult('Failed to receive credential from Google.', 'error');
+        }
+      }
+
+      async function testToken() {
+        if (!idToken) {
+          displayResult('No token available. Please sign in first.', 'error');
+          return;
+        }
+
+        const apiUrl = document.getElementById('apiUrl').value;
+        const endpoint = `${apiUrl}/api/v1/auth/google`;
+
+        displayResult('Sending token to backend...', 'info');
+
+        try {
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              googleIdToken: idToken,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            displayResult(
+              '✅ Success!\n\n' +
+                'Status: ' +
+                response.status +
+                '\n' +
+                'Response:\n' +
+                JSON.stringify(data, null, 2),
+              'success',
+            );
+          } else {
+            displayResult(
+              '❌ Error!\n\n' +
+                'Status: ' +
+                response.status +
+                '\n' +
+                'Response:\n' +
+                JSON.stringify(data, null, 2),
+              'error',
+            );
+          }
+        } catch (error) {
+          displayResult(
+            '❌ Network Error!\n\n' +
+              'Error: ' +
+              error.message +
+              '\n\n' +
+              'Make sure your backend server is running and the API URL is correct.',
+            'error',
+          );
+        }
+      }
+
+      // Initialize Google Sign-In button
+      function initializeGoogleButton() {
+        if (typeof google !== 'undefined' && google.accounts) {
+          const clientId = document.getElementById('clientId').value;
+          if (clientId && clientId !== GOOGLE_CLIENT_ID_PLACEHOLDER) {
+            google.accounts.id.initialize({
+              client_id: clientId,
+              callback: handleCredentialResponse,
+            });
+
+            const buttonDiv = document.getElementById('googleButton');
+            buttonDiv.innerHTML = '';
+            google.accounts.id.renderButton(buttonDiv, {
+              theme: 'outline',
+              size: 'large',
+              type: 'standard',
+            });
+          }
+        }
+      }
+
+      // Initialize on page load
+      window.onload = function () {
+        // Load saved values first
+        loadSavedValues();
+
+        // Wait for Google library to load
+        function waitForGoogle() {
+          if (typeof google !== 'undefined' && google.accounts) {
+            initializeGoogleButton();
+          } else {
+            setTimeout(waitForGoogle, 100);
+          }
+        }
+        waitForGoogle();
+
+        // Watch for client ID changes to reinitialize button and save
+        document
+          .getElementById('clientId')
+          .addEventListener('change', function () {
+            saveClientId();
+            initializeGoogleButton();
+          });
+
+        // Watch for API URL changes to save
+        document
+          .getElementById('apiUrl')
+          .addEventListener('change', function () {
+            saveApiUrl();
+          });
+
+        // Save API URL on input
+        document
+          .getElementById('apiUrl')
+          .addEventListener('input', function () {
+            saveApiUrl();
+          });
+
+        if (!idToken) {
+          displayResult(
+            'Enter your Google Client ID and API URL, then click "Sign in with Google".',
+            'info',
+          );
+        }
+      };
+    </script>
+  </body>
+</html>
