@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U testuser -d testdb"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb?schema=public
+      DIRECT_URL: postgresql://testuser:testpass@localhost:5432/testdb?schema=public
+      JWT_SECRET: jwt-scret
+      GOOGLE_CLIENT_ID: CLIENT_ID
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23
+
+      - name: Install Yarn
+        run: npm install --global yarn
+
+      - name: Install dependencies
+        run: yarn install --ignore-scripts
+
+      - name: Generate Prisma code
+        run: yarn prisma:generate
+
+      - name: Run migrations
+        run: yarn prisma:migrate:dev
+
+      - name: Run tests
+        run: yarn test
+
+      - name: Run e2e tests
+        run: yarn test:e2e
