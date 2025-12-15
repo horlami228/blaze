@@ -1,7 +1,7 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login-dto';
-import { CreateUserDto } from './dto/create-user-dto';
+import { CreateRiderUserDto } from './dto/create-user-dto';
 import { Public } from './decorators/public.decorators';
 
 import {
@@ -11,6 +11,7 @@ import {
   ApiBadRequestResponse,
   ApiBody,
 } from '@nestjs/swagger';
+import { GoogleLoginDto } from './dto/google-login-dto';
 
 @ApiTags('Auth')
 @Controller('api/v1/auth')
@@ -55,8 +56,8 @@ export class AuthController {
       },
     },
   })
-  createUser(@Body() createUserDto: CreateUserDto) {
-    return this.authService.createUser(createUserDto);
+  createUser(@Body() createRiderUserDto: CreateRiderUserDto) {
+    return this.authService.register(createRiderUserDto);
   }
 
   @Public()
@@ -96,5 +97,44 @@ export class AuthController {
   })
   login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto.email, loginDto.password);
+  }
+
+  @Public()
+  @Post('google')
+  @ApiOperation({ summary: 'Login/register a user with google oAuth' })
+  @ApiBody({ type: GoogleLoginDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Login successful',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'Login successful',
+        data: {
+          user: {
+            id: 1,
+            email: 'test@example.com',
+            firstName: 'John',
+            lastName: 'Doe',
+            role: 'STUDENT',
+            isVerified: true,
+          },
+          token: 'jwt.token.here',
+        },
+      },
+    },
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid credentials',
+    schema: {
+      example: {
+        statusCode: 401,
+        message: 'Invalid credentials',
+        error: 'Unauthorized',
+      },
+    },
+  })
+  loginWithGoogle(@Body() googleToken: GoogleLoginDto) {
+    return this.authService.loginWithGoogle(googleToken);
   }
 }
