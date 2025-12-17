@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { CreateRiderUserDto } from './dto/create-user-dto';
+import { CreateDriverUserDto, CreateRiderUserDto } from './dto/create-user-dto';
 import { LoginDto } from './dto/login-dto';
 import { GoogleLoginDto } from './dto/google-login-dto';
 import { UnauthorizedException } from '@nestjs/common';
@@ -68,7 +68,8 @@ describe('AuthController', () => {
 
   beforeEach(async () => {
     const mockAuthService = {
-      register: jest.fn(),
+      registerRider: jest.fn(),
+      registerDriver: jest.fn(),
       login: jest.fn(),
       loginWithGoogle: jest.fn(),
     };
@@ -91,7 +92,7 @@ describe('AuthController', () => {
   });
 
   describe('register', () => {
-    it('should call authService.register and return response', async () => {
+    it('should call authService.registerRider and return response', async () => {
       const createUserDto: CreateRiderUserDto = {
         email: 'test@example.com',
         password: 'password123',
@@ -99,11 +100,30 @@ describe('AuthController', () => {
         lastName: 'Doe',
       };
 
-      authService.register.mockResolvedValue(mockRegisterResponse);
+      authService.registerRider.mockResolvedValue(mockRegisterResponse);
 
       const result = await controller.createUser(createUserDto);
 
-      expect(authService.register).toHaveBeenCalledWith(createUserDto);
+      expect(authService.registerRider).toHaveBeenCalledWith(createUserDto);
+      expect(result).toEqual(mockRegisterResponse);
+      expect(result.statusCode).toBe(201);
+      expect(result.token).toBeDefined();
+    });
+
+    it('should call authService.registerDriver and return response', async () => {
+      const createUserDto: CreateDriverUserDto = {
+        email: 'test@example.com',
+        password: 'password123',
+        firstName: 'John',
+        lastName: 'Doe',
+        phone: '1234567890',
+      };
+
+      authService.registerDriver.mockResolvedValue(mockRegisterResponse);
+
+      const result = await controller.createDriver(createUserDto);
+
+      expect(authService.registerDriver).toHaveBeenCalledWith(createUserDto);
       expect(result).toEqual(mockRegisterResponse);
       expect(result.statusCode).toBe(201);
       expect(result.token).toBeDefined();

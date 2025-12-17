@@ -4,9 +4,10 @@ import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RiderService } from '../rider/rider.service';
+import { DriverService } from 'src/driver/driver.service';
 import { GoogleStrategy } from './strategy/google.strategy';
 import { PasswordUtil } from '../common/utils/password.utils';
-import { CreateRiderUserDto } from './dto/create-user-dto';
+import { CreateDriverUserDto, CreateRiderUserDto } from './dto/create-user-dto';
 import { GoogleLoginDto } from './dto/google-login-dto';
 
 // Mock PasswordUtil
@@ -23,8 +24,9 @@ describe('AuthService', () => {
   let jwtService: jest.Mocked<JwtService>;
   let riderService: jest.Mocked<RiderService>;
   let googleStrategy: jest.Mocked<GoogleStrategy>;
+  let driverService: jest.Mocked<DriverService>;
 
-  const mockUser = {
+  const mockUserRider = {
     id: '1',
     email: 'test@example.com',
     firstName: 'John',
@@ -37,6 +39,11 @@ describe('AuthService', () => {
     avatar: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+  };
+
+  const mockUserDriver = {
+    ...mockUserRider,
+    role: 'DRIVER',
   };
 
   beforeEach(async () => {
@@ -54,6 +61,10 @@ describe('AuthService', () => {
 
     const mockRiderService = {
       createRider: jest.fn(),
+    };
+
+    const mockDriverService = {
+      createDriver: jest.fn(),
     };
 
     const mockGoogleStrategy = {
@@ -77,6 +88,10 @@ describe('AuthService', () => {
           useValue: mockRiderService,
         },
         {
+          provide: DriverService,
+          useValue: mockDriverService,
+        },
+        {
           provide: GoogleStrategy,
           useValue: mockGoogleStrategy,
         },
@@ -88,13 +103,14 @@ describe('AuthService', () => {
     jwtService = module.get(JwtService);
     riderService = module.get(RiderService);
     googleStrategy = module.get(GoogleStrategy);
+    driverService = module.get(DriverService);
 
     // Reset mocks
     jest.clearAllMocks();
   });
 
   describe('register', () => {
-    it('should create user and return token for valid data', async () => {
+    it('should create a rider and return token for valid data', async () => {
       const createUserDto: CreateRiderUserDto = {
         email: 'test@example.com',
         password: 'password123',
@@ -110,21 +126,21 @@ describe('AuthService', () => {
       (PasswordUtil.hash as jest.Mock).mockResolvedValue(hashedPassword);
 
       (prismaService.user.create as jest.Mock).mockResolvedValue({
-        ...mockUser,
+        ...mockUserRider,
         password: hashedPassword,
       });
 
       riderService.createRider.mockResolvedValue({
-        id: '1', // import { PasswordUtil } from '../common/utils/password.utils';
+        id: '1',
         userId: '1',
         createdAt: new Date(),
         updatedAt: new Date(),
-        user: mockUser,
+        user: mockUserRider,
       } as any);
 
       jwtService.sign.mockReturnValue(token);
 
-      const result = await service.register(createUserDto);
+      const result = await service.registerRider(createUserDto);
 
       expect(prismaService.user.findFirst as jest.Mock).toHaveBeenCalledWith({
         where: {
@@ -141,10 +157,72 @@ describe('AuthService', () => {
         data: {
           ...createUserDto,
           password: hashedPassword,
+          role: 'RIDER',
         },
       });
 
-      expect(riderService.createRider).toHaveBeenCalledWith(mockUser.id);
+      expect(riderService.createRider).toHaveBeenCalledWith(mockUserRider.id);
+      expect(result.statusCode).toBe(201);
+      expect(result.message).toBe('User Created Successfully');
+      expect(result.token).toBe(token);
+      expect(result.data).not.toHaveProperty('password');
+    });
+
+    it('should create a driver and return token for valid data', async () => {
+      const createUserDto: CreateDriverUserDto = {
+        email: 'test@example.com',
+        password: 'password123',
+        firstName: 'John',
+        lastName: 'Doe',
+        phone: '1234567890',
+      };
+
+      const hashedPassword = 'hashedPassword123';
+      const token = 'jwt-token';
+
+      (prismaService.user.findFirst as jest.Mock).mockResolvedValue(null);
+
+      (PasswordUtil.hash as jest.Mock).mockResolvedValue(hashedPassword);
+
+      (prismaService.user.create as jest.Mock).mockResolvedValue({
+        ...mockUserDriver,
+        password: hashedPassword,
+      });
+
+      driverService.createDriver.mockResolvedValue({
+        id: '1',
+        userId: '1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        user: mockUserDriver,
+      } as any);
+
+      jwtService.sign.mockReturnValue(token);
+
+      const result = await service.registerDriver(createUserDto);
+
+      expect(prismaService.user.findFirst as jest.Mock).toHaveBeenCalledWith({
+        where: {
+          OR: [
+            { email: createUserDto.email },
+            ...(createUserDto.phone ? [{ phone: createUserDto.phone }] : []),
+          ],
+        },
+      });
+
+      expect(PasswordUtil.hash).toHaveBeenCalledWith(createUserDto.password);
+
+      expect(prismaService.user.create).toHaveBeenCalledWith({
+        data: {
+          ...createUserDto,
+          password: hashedPassword,
+          role: 'DRIVER',
+        },
+      });
+
+      expect(driverService.createDriver).toHaveBeenCalledWith(
+        mockUserDriver.id,
+      );
       expect(result.statusCode).toBe(201);
       expect(result.message).toBe('User Created Successfully');
       expect(result.token).toBe(token);
@@ -159,12 +237,14 @@ describe('AuthService', () => {
         lastName: 'Doe',
       };
 
-      (prismaService.user.findFirst as jest.Mock).mockResolvedValue(mockUser);
+      (prismaService.user.findFirst as jest.Mock).mockResolvedValue(
+        mockUserRider,
+      );
 
-      await expect(service.register(createUserDto)).rejects.toThrow(
+      await expect(service.registerDriver(createUserDto)).rejects.toThrow(
         BadRequestException,
       );
-      await expect(service.register(createUserDto)).rejects.toThrow(
+      await expect(service.registerDriver(createUserDto)).rejects.toThrow(
         'Email already in use',
       );
 
@@ -179,7 +259,9 @@ describe('AuthService', () => {
       const password = 'password123';
       const token = 'jwt-token';
 
-      (prismaService.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+      (prismaService.user.findUnique as jest.Mock).mockResolvedValue(
+        mockUserRider,
+      );
       (PasswordUtil.verify as jest.Mock).mockResolvedValue(true);
       jwtService.sign.mockReturnValue(token);
 
@@ -189,13 +271,13 @@ describe('AuthService', () => {
         where: { email },
       });
       expect(PasswordUtil.verify).toHaveBeenCalledWith(
-        mockUser.password,
+        mockUserRider.password,
         password,
       );
       expect(jwtService.sign).toHaveBeenCalledWith({
-        sub: mockUser.id,
-        email: mockUser.email,
-        role: mockUser.role,
+        sub: mockUserRider.id,
+        email: mockUserRider.email,
+        role: mockUserRider.role,
       });
       expect(result.statusCode).toBe(201);
       expect(result.message).toBe('Login successful');
@@ -248,7 +330,7 @@ describe('AuthService', () => {
       };
 
       const existingUser = {
-        ...mockUser,
+        ...mockUserRider,
         googleId: 'google-id-123',
       };
 
@@ -305,7 +387,7 @@ describe('AuthService', () => {
       };
 
       const newUser = {
-        ...mockUser,
+        ...mockUserRider,
         id: '2',
         email: 'newuser@example.com',
         firstName: 'Jane',

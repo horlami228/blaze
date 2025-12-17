@@ -35,14 +35,30 @@ describe('Auth (e2e)', () => {
     await app.close();
   });
 
-  it('POST /auth/register creates user', async () => {
+  it('POST /auth/register-rider creates a new rider', async () => {
     const res = await request(app.getHttpServer())
-      .post('/api/v1/auth/register')
+      .post('/api/v1/auth/register-rider')
       .send({
         email: 'e2e@example.com',
         password: 'Pass123!',
         firstName: 'Jane',
         lastName: 'Doe',
+      })
+      .expect(201);
+
+    expect(res.body.token).toBeDefined();
+    expect(res.body.data?.password).toBeUndefined();
+  });
+
+  it('POST /auth/register-driver creates a new driver', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/auth/register-driver')
+      .send({
+        email: 'e2e@example.com',
+        password: 'Pass123!',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        phone: '1234567890',
       })
       .expect(201);
 
@@ -56,7 +72,7 @@ describe('Auth (e2e)', () => {
 
     // first register the user
     await request(app.getHttpServer())
-      .post('/api/v1/auth/register')
+      .post('/api/v1/auth/register-rider')
       .send({
         email,
         password,

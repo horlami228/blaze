@@ -10,6 +10,7 @@ import { RiderService } from 'src/rider/rider.service';
 import { PasswordUtil } from 'src/common/utils/password.utils';
 import { GoogleStrategy } from './strategy/google.strategy';
 import { GoogleLoginDto } from './dto/google-login-dto';
+import { DriverService } from 'src/driver/driver.service';
 
 @Injectable()
 export class AuthService {
@@ -18,9 +19,30 @@ export class AuthService {
     private jwtService: JwtService,
     private riderService: RiderService,
     private googleStrategy: GoogleStrategy,
+    private driverService: DriverService,
   ) {}
 
-  async register(data: CreateRiderUserDto) {
+  async registerRider(data: CreateRiderUserDto) {
+    return this.processRegistration(data, 'RIDER', async (user) => {
+      if (user.role === 'RIDER') {
+        await this.riderService.createRider(user.id);
+      }
+    });
+  }
+
+  async registerDriver(data: CreateRiderUserDto) {
+    return this.processRegistration(data, 'DRIVER', async (user) => {
+      if (user.role === 'DRIVER') {
+        await this.driverService.createDriver(user.id);
+      }
+    });
+  }
+
+  private async processRegistration(
+    data: CreateRiderUserDto,
+    roleOverride: 'DRIVER' | 'RIDER',
+    onSuccess: (user: any) => Promise<void>,
+  ) {
     // check if email already exists
     const existing = await this.prisma.user.findFirst({
       where: {
@@ -46,15 +68,12 @@ export class AuthService {
     const user = await this.prisma.user.create({
       data: {
         ...data,
-        password, // store hashed password
+        password,
+        ...(roleOverride ? { role: roleOverride } : {}),
       },
     });
 
-    // create rider if user is a rider
-
-    if (user.role === 'RIDER') {
-      await this.riderService.createRider(user.id);
-    }
+    await onSuccess(user);
 
     return {
       statusCode: 201,
