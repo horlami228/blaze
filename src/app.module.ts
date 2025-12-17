@@ -13,6 +13,7 @@ import { RolesGuard } from './auth/guard/role.guard';
 import { RiderModule } from './rider/rider.module';
 import * as Joi from 'joi';
 import { RiderController } from './rider/rider.controller';
+import { DriverModule } from './driver/driver.module';
 
 @Module({
   imports: [
@@ -31,6 +32,8 @@ import { RiderController } from './rider/rider.controller';
     AuthModule,
 
     RiderModule,
+
+    DriverModule,
   ],
   controllers: [AppController, RiderController],
   providers: [

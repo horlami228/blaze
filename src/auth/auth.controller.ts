@@ -1,7 +1,7 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login-dto';
-import { CreateRiderUserDto } from './dto/create-user-dto';
+import { CreateDriverUserDto, CreateRiderUserDto } from './dto/create-user-dto';
 import { Public } from './decorators/public.decorators';
 
 import {
@@ -19,8 +19,8 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Public()
-  @Post('register')
-  @ApiOperation({ summary: 'Create a new user' })
+  @Post('register-rider')
+  @ApiOperation({ summary: 'Create a new rider' })
   @ApiResponse({
     status: 201,
     description: 'User created successfully',
@@ -57,7 +57,49 @@ export class AuthController {
     },
   })
   createUser(@Body() createRiderUserDto: CreateRiderUserDto) {
-    return this.authService.register(createRiderUserDto);
+    return this.authService.registerRider(createRiderUserDto);
+  }
+
+  @Public()
+  @Post('register-driver')
+  @ApiOperation({ summary: 'Create a new driver' })
+  @ApiResponse({
+    status: 201,
+    description: 'User created successfully',
+    schema: {
+      example: {
+        statusCode: 201,
+        message: 'User Created Successfully',
+        data: {
+          id: 1,
+          email: 'test@example.com',
+          firstName: 'John',
+          lastName: 'Doe',
+          role: 'DRIVER',
+          isVerified: false,
+          createdAt: '2025-11-17T10:00:00.000Z',
+          updatedAt: '2025-11-17T10:00:00.000Z',
+        },
+      },
+    },
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation failed',
+    schema: {
+      example: {
+        statusCode: 400,
+        error: 'Bad Request',
+        message: [
+          'email must be an email',
+          'password should not be empty',
+          'firstName should not be empty',
+          'lastName should not be empty',
+        ],
+      },
+    },
+  })
+  createDriver(@Body() createDriverUserDto: CreateDriverUserDto) {
+    return this.authService.registerDriver(createDriverUserDto);
   }
 
   @Public()
