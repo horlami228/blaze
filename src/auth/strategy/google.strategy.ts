@@ -1,4 +1,5 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { OAuth2Client } from 'google-auth-library';
 
 export interface GoogleTokenPayload {
@@ -15,8 +16,8 @@ export interface GoogleTokenPayload {
 export class GoogleStrategy {
   private client: OAuth2Client;
 
-  constructor() {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
+  constructor(private configService: ConfigService) {
+    const clientId = this.configService.get('GOOGLE_CLIENT_ID');
     if (!clientId) {
       throw new Error(
         'GOOGLE_CLIENT_ID is not defined in environment variables',
@@ -35,7 +36,7 @@ export class GoogleStrategy {
     try {
       const ticket = await this.client.verifyIdToken({
         idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
+        audience: this.configService.get('GOOGLE_CLIENT_ID'),
       });
 
       const payload = ticket.getPayload();
