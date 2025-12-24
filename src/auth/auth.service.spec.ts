@@ -9,6 +9,7 @@ import { GoogleStrategy } from './strategy/google.strategy';
 import { PasswordUtil } from '../common/utils/password.utils';
 import { CreateDriverUserDto, CreateRiderUserDto } from './dto/create-user-dto';
 import { GoogleLoginDto } from './dto/google-login-dto';
+import { PinoLogger } from 'nestjs-pino';
 
 // Mock PasswordUtil
 jest.mock('../common/utils/password.utils', () => ({
@@ -25,6 +26,16 @@ describe('AuthService', () => {
   let riderService: jest.Mocked<RiderService>;
   let googleStrategy: jest.Mocked<GoogleStrategy>;
   let driverService: jest.Mocked<DriverService>;
+
+  // Mock PinoLogger with all methods used by the service
+  const mockLogger = {
+    info: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+    error: jest.fn(),
+    trace: jest.fn(),
+    fatal: jest.fn(),
+  };
 
   const mockUserRider = {
     id: '1',
@@ -94,6 +105,10 @@ describe('AuthService', () => {
         {
           provide: GoogleStrategy,
           useValue: mockGoogleStrategy,
+        },
+        {
+          provide: PinoLogger,
+          useValue: mockLogger,
         },
       ],
     }).compile();
@@ -174,7 +189,6 @@ describe('AuthService', () => {
         password: 'password123',
         firstName: 'John',
         lastName: 'Doe',
-        phone: '1234567890',
       };
 
       const hashedPassword = 'hashedPassword123';
@@ -203,10 +217,7 @@ describe('AuthService', () => {
 
       expect(prismaService.user.findFirst as jest.Mock).toHaveBeenCalledWith({
         where: {
-          OR: [
-            { email: createUserDto.email },
-            ...(createUserDto.phone ? [{ phone: createUserDto.phone }] : []),
-          ],
+          OR: [{ email: createUserDto.email }],
         },
       });
 

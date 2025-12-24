@@ -59,12 +59,4 @@ export class CreateDriverUserDto implements Prisma.UserCreateInput {
   @IsNotEmpty()
   @ApiProperty({ description: 'Last name of the user', example: 'Doe' })
   lastName: string;
-
-  @ApiPropertyOptional({
-    description: 'User phone number',
-    example: '+1234567890',
-  })
-  @IsString()
-  @IsNotEmpty()
-  phone: string;
 }

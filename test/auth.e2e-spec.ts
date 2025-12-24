@@ -24,11 +24,16 @@ describe('Auth (e2e)', () => {
     await app.init();
 
     prisma = app.get(PrismaService);
+    await prisma.$executeRawUnsafe(
+      `TRUNCATE TABLE "User", "Rider", "Driver" CASCADE`,
+    );
   });
 
   afterEach(async () => {
     // simple cleanup; adjust to your tables
-    await prisma.$executeRawUnsafe(`TRUNCATE TABLE "User", "Rider" CASCADE`);
+    await prisma.$executeRawUnsafe(
+      `TRUNCATE TABLE "User", "Rider", "Driver" CASCADE`,
+    );
   });
 
   afterAll(async () => {
@@ -58,7 +63,6 @@ describe('Auth (e2e)', () => {
         password: 'Pass123!',
         firstName: 'Jane',
         lastName: 'Doe',
-        phone: '1234567890',
       })
       .expect(201);
 

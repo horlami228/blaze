@@ -1,10 +1,14 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
+import helmet from 'helmet';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+  });
   // Swagger setup
   const config = new DocumentBuilder()
     .setTitle('School Portal')
@@ -12,21 +16,55 @@ async function bootstrap() {
     .setVersion('1.0')
     .build();
 
+  const logger = app.get(Logger);
+  app.useLogger(logger);
+
+  app.use(
+    helmet({
+      contentSecurityPolicy: process.env.NODE_ENV === 'production',
+      crossOriginEmbedderPolicy: process.env.NODE_ENV === 'production',
+      crossOriginResourcePolicy: process.env.NODE_ENV === 'production',
+    }),
+  );
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+      exceptionFactory: (errors) => {
+        if (process.env.NODE_ENV === 'production') {
+          // Don't leak validation details in production
+          throw new BadRequestException('Invalid request data');
+        }
+        // In development, return detailed validation errors
+        const messages = errors.map((error) => ({
+          field: error.property,
+          errors: Object.values(error.constraints || {}),
+        }));
+        throw new BadRequestException({
+          message: 'Validation failed',
+          errors: messages,
+        });
+      },
     }),
   );
 
   app.enableCors();
+  // Disable Express fingerprinting
+  app.getHttpAdapter().getInstance().disable('x-powered-by');
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
   console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
-
-  await app.listen(process.env.PORT ?? 9000);
+  const port = process.env.PORT ?? 9000;
+  await app.listen(port);
+  logger.log(`🚀 Application is running on: http://localhost:${port}`);
+  logger.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.log(`🔒 Security: Helmet enabled, Rate limiting active`);
 }
 bootstrap();
