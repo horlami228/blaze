@@ -1,28 +1,13 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { Logger } from 'nestjs-pino';
 
 @Injectable()
 export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
-  constructor() {
-    // Log environment variables
-    console.log('=== Environment Variables Check ===');
-    console.log(
-      'DATABASE_URL:',
-      process.env.DATABASE_URL ? '✓ Set' : '✗ Not set',
-    );
-    console.log('DIRECT_URL:', process.env.DIRECT_URL ? '✓ Set' : '✗ Not set');
-
-    // Optional: Print first 20 characters to verify without exposing full credentials
-    if (process.env.DATABASE_URL) {
-      console.log(
-        'DATABASE_URL preview:',
-        process.env.DATABASE_URL.substring(0, 20) + '...',
-      );
-    }
-    console.log('===================================');
+  constructor(private readonly logger: Logger) {
     super({
       datasources: {
         db: {
@@ -30,6 +15,22 @@ export class PrismaService
         },
       },
     });
+
+    // Log environment variables via Pino
+    this.logger.debug('=== Environment Variables Check ===');
+    this.logger.debug(
+      `DATABASE_URL: ${process.env.DATABASE_URL ? '✓ Set' : '✗ Not set'}`,
+    );
+    this.logger.debug(
+      `DIRECT_URL: ${process.env.DIRECT_URL ? '✓ Set' : '✗ Not set'}`,
+    );
+
+    if (process.env.DATABASE_URL) {
+      this.logger.debug(
+        `DATABASE_URL preview: ${process.env.DATABASE_URL.substring(0, 20)}...`,
+      );
+    }
+    this.logger.debug('===================================');
   }
 
   async onModuleInit() {
@@ -44,10 +45,10 @@ export class PrismaService
     for (let i = 0; i < retries; i++) {
       try {
         await this.$connect();
-        console.log('Database connected');
+        this.logger.log('Database connected');
         return;
       } catch (err) {
-        console.warn(`DB connection failed. Retry ${i + 1}/${retries}...`);
+        this.logger.warn(`DB connection failed. Retry ${i + 1}/${retries}...`);
         if (i === retries - 1) throw err; // final failure
         await new Promise((res) => setTimeout(res, delay));
       }
