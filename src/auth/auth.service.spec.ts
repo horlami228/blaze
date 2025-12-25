@@ -50,6 +50,7 @@ describe('AuthService', () => {
     avatar: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+    deletedAt: null,
   };
 
   const mockUserDriver = {
@@ -279,7 +280,7 @@ describe('AuthService', () => {
       const result = await service.login(email, password);
 
       expect(prismaService.user.findUnique as jest.Mock).toHaveBeenCalledWith({
-        where: { email },
+        where: { email, deletedAt: null },
       });
       expect(PasswordUtil.verify).toHaveBeenCalledWith(
         mockUserRider.password,
@@ -310,7 +311,7 @@ describe('AuthService', () => {
       );
 
       expect(prismaService.user.findUnique as jest.Mock).toHaveBeenCalledWith({
-        where: { email },
+        where: { email, deletedAt: null },
       });
       expect(PasswordUtil.verify).not.toHaveBeenCalled();
     });
@@ -351,7 +352,8 @@ describe('AuthService', () => {
         googleTokenPayload,
       );
       (googleStrategy.extractUserInfo as jest.Mock).mockReturnValue(userInfo);
-      (prismaService.user.findUnique as jest.Mock).mockResolvedValue(
+
+      (prismaService.user.findFirst as jest.Mock).mockResolvedValue(
         existingUser,
       );
       jwtService.sign.mockReturnValue(token);
@@ -364,8 +366,8 @@ describe('AuthService', () => {
       expect(googleStrategy.extractUserInfo).toHaveBeenCalledWith(
         googleTokenPayload,
       );
-      expect(prismaService.user.findUnique as jest.Mock).toHaveBeenCalledWith({
-        where: { email: userInfo.email },
+      expect(prismaService.user.findFirst as jest.Mock).toHaveBeenCalledWith({
+        where: { email: userInfo.email, deletedAt: null },
       });
       expect(result.statusCode).toBe(201);
       expect(result.message).toBe('Login successful');
@@ -413,7 +415,7 @@ describe('AuthService', () => {
 
       googleStrategy.verifyToken.mockResolvedValue(googleTokenPayload);
       googleStrategy.extractUserInfo.mockReturnValue(userInfo);
-      (prismaService.user.findUnique as jest.Mock).mockResolvedValue(null);
+      (prismaService.user.findFirst as jest.Mock).mockResolvedValue(null);
       (prismaService.user.create as jest.Mock).mockResolvedValue(newUser);
       riderService.createRider.mockResolvedValue({
         id: '1',
@@ -432,8 +434,8 @@ describe('AuthService', () => {
       expect(googleStrategy.extractUserInfo).toHaveBeenCalledWith(
         googleTokenPayload,
       );
-      expect(prismaService.user.findUnique as jest.Mock).toHaveBeenCalledWith({
-        where: { email: userInfo.email },
+      expect(prismaService.user.findFirst as jest.Mock).toHaveBeenCalledWith({
+        where: { email: userInfo.email, deletedAt: null },
       });
       expect(prismaService.user.create).toHaveBeenCalledWith({
         data: {

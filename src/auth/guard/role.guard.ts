@@ -6,10 +6,14 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
+import { PinoLogger } from 'nestjs-pino';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(
+    private reflector: Reflector,
+    private logger: PinoLogger,
+  ) {}
 
   canActivate(context: ExecutionContext): boolean {
     const requiredRoles = this.reflector.getAllAndOverride<string[]>(
@@ -20,7 +24,7 @@ export class RolesGuard implements CanActivate {
     if (!requiredRoles) return true;
 
     const { user } = context.switchToHttp().getRequest();
-    console.log('The user role', user.role);
+    this.logger.info({ userId: user.id }, `User role is ${user.role}`);
     if (!requiredRoles.includes(user.role)) {
       throw new ForbiddenException('Access denied');
     }

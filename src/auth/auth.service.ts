@@ -102,7 +102,9 @@ export class AuthService {
   async login(email: string, plainPassword: string) {
     this.logger.info({ email }, 'Login attempt');
 
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findUnique({
+      where: { email, deletedAt: null },
+    });
     if (!user) {
       this.logger.warn({ email }, 'Login failed - user not found');
       throw new UnauthorizedException('Email or Password Incorrect');
@@ -151,8 +153,8 @@ export class AuthService {
       this.logger.info({ email: userInfo.email }, 'Google login attempt');
 
       // Check if user exists by email
-      const existingUser = await this.prisma.user.findUnique({
-        where: { email: userInfo.email },
+      const existingUser = await this.prisma.user.findFirst({
+        where: { email: userInfo.email, deletedAt: null },
       });
 
       if (existingUser) {
