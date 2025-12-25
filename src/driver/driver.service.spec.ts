@@ -7,6 +7,7 @@ import { UpdateDriverPersonalInfoDto } from './dto/update-personal-info.dto';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Gender, VehicleColor } from '@prisma/client';
 import { PinoLogger } from 'nestjs-pino';
+import { CloudflareR2Service } from 'src/common/cloudflare/cloudflare-r2.service';
 
 describe('DriverService', () => {
   let service: DriverService;
@@ -20,6 +21,11 @@ describe('DriverService', () => {
     error: jest.fn(),
     trace: jest.fn(),
     fatal: jest.fn(),
+  };
+
+  const mockCloudflareR2 = {
+    uploadFile: jest.fn(),
+    getPresignedDownloadUrl: jest.fn(),
   };
 
   const mockUser = {
@@ -94,6 +100,10 @@ describe('DriverService', () => {
         {
           provide: PinoLogger,
           useValue: mockLogger,
+        },
+        {
+          provide: CloudflareR2Service,
+          useValue: mockCloudflareR2,
         },
       ],
     }).compile();
@@ -200,7 +210,14 @@ describe('DriverService', () => {
       profilePhoto: null,
     };
 
-    it('should update driver license info', async () => {
+    beforeEach(() => {
+      mockCloudflareR2.uploadFile.mockImplementation(
+        (file: Express.Multer.File, folder: string) =>
+          Promise.resolve(`${folder}/${file.originalname}`),
+      );
+    });
+
+    it('should update driver license info and upload photos', async () => {
       prismaService.user.findUnique.mockResolvedValue({
         ...mockUser,
         driver: mockDriver,
@@ -208,6 +225,8 @@ describe('DriverService', () => {
       prismaService.driver.update.mockResolvedValue({
         ...mockDriver,
         licenseNumber: dto.licenseNumber,
+        licensePhoto: 'driver-documents/test.jpg',
+        profilePhoto: 'driver-documents/test.jpg',
       });
 
       const result = await service.updateDriverInfo(
@@ -218,10 +237,13 @@ describe('DriverService', () => {
       );
 
       expect(result.statusCode).toBe(200);
+      expect(mockCloudflareR2.uploadFile).toHaveBeenCalledTimes(2);
       expect(prismaService.driver.update).toHaveBeenCalledWith({
         where: { id: mockDriver.id },
         data: {
           licenseNumber: dto.licenseNumber,
+          licensePhoto: 'driver-documents/test.jpg',
+          profilePhoto: 'driver-documents/test.jpg',
           onboardingStep: 2,
         },
       });
@@ -238,13 +260,24 @@ describe('DriverService', () => {
       interiorPhoto: null,
     };
 
-    it('should add a vehicle and complete onboarding', async () => {
+    beforeEach(() => {
+      mockCloudflareR2.uploadFile.mockImplementation(
+        (file: Express.Multer.File, folder: string) =>
+          Promise.resolve(`${folder}/${file.originalname}`),
+      );
+    });
+
+    it('should add a vehicle with photos and complete onboarding', async () => {
       prismaService.user.findUnique.mockResolvedValue({
         ...mockUser,
         driver: { ...mockDriver, vehicle: null },
       });
       prismaService.vehicle.findUnique.mockResolvedValue(null);
-      prismaService.vehicle.create.mockResolvedValue(mockVehicle);
+      prismaService.vehicle.create.mockResolvedValue({
+        ...mockVehicle,
+        exteriorPhoto: 'vehicles/test.jpg',
+        interiorPhoto: 'vehicles/test.jpg',
+      });
 
       const result = await service.addVehicle(
         'user-1',
@@ -254,6 +287,15 @@ describe('DriverService', () => {
       );
 
       expect(result.statusCode).toBe(201);
+      expect(mockCloudflareR2.uploadFile).toHaveBeenCalledTimes(2);
+      expect(prismaService.vehicle.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            exteriorPhoto: 'vehicles/test.jpg',
+            interiorPhoto: 'vehicles/test.jpg',
+          }),
+        }),
+      );
       expect(prismaService.driver.update).toHaveBeenCalledWith({
         where: { id: mockDriver.id },
         data: {
@@ -298,6 +340,106 @@ describe('DriverService', () => {
 
       expect(result.statusCode).toBe(200);
       expect(result.data).toEqual(models);
+    });
+  });
+
+  describe('getProfile', () => {
+    const mockDriverWithCounts = {
+      ...mockDriver,
+      licensePhoto: 'license-key.jpg',
+      profilePhoto: 'profile-key.jpg',
+      vehicle: {
+        ...mockVehicle,
+        exteriorPhoto: 'exterior-key.jpg',
+        interiorPhoto: 'interior-key.jpg',
+        model: {
+          id: 'model-1',
+          name: 'Camry',
+          manufacturer: { id: 'mfr-1', name: 'Toyota' },
+        },
+      },
+      _count: {
+        rides: 25,
+        ratingsReceived: 10,
+      },
+    };
+
+    beforeEach(() => {
+      prismaService.rating = {
+        aggregate: jest.fn(),
+      };
+      mockCloudflareR2.getPresignedDownloadUrl.mockImplementation(
+        (bucket: string, key: string) =>
+          Promise.resolve(`https://signed-url.com/${key}`),
+      );
+    });
+
+    it('should return driver profile with presigned URLs and stats', async () => {
+      prismaService.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        driver: mockDriverWithCounts,
+      });
+      prismaService.rating.aggregate.mockResolvedValue({
+        _avg: { rating: 4.5 },
+      });
+
+      const result = await service.getProfile('user-1');
+
+      expect(result.statusCode).toBe(200);
+      expect(result.data.user.firstName).toBe('John');
+      expect(result.data.driver.totalRides).toBe(25);
+      expect(result.data.driver.totalRatings).toBe(10);
+      expect(result.data.driver.averageRating).toBe(4.5);
+      expect(result.data.driver.licensePhoto).toContain('signed-url');
+      expect(result.data.driver.profilePhoto).toContain('signed-url');
+      expect(result.data.vehicle.exteriorPhoto).toContain('signed-url');
+      expect(result.data.vehicle.interiorPhoto).toContain('signed-url');
+    });
+
+    it('should throw NotFoundException if user not found', async () => {
+      prismaService.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.getProfile('invalid-user')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw NotFoundException if user has no driver profile', async () => {
+      prismaService.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        driver: null,
+      });
+
+      await expect(service.getProfile('user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should return null vehicle if driver has no vehicle', async () => {
+      const driverWithoutVehicle = {
+        ...mockDriver,
+        licensePhoto: 'license-key.jpg',
+        profilePhoto: 'profile-key.jpg',
+        vehicle: null,
+        _count: {
+          rides: 0,
+          ratingsReceived: 0,
+        },
+      };
+
+      prismaService.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        driver: driverWithoutVehicle,
+      });
+      prismaService.rating.aggregate.mockResolvedValue({
+        _avg: { rating: null },
+      });
+
+      const result = await service.getProfile('user-1');
+
+      expect(result.statusCode).toBe(200);
+      expect(result.data.vehicle).toBeNull();
+      expect(result.data.driver.averageRating).toBe(0);
     });
   });
 });
