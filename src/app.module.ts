@@ -20,6 +20,7 @@ import { loggerConfigFactory } from './common/config/logger.config';
 import { LoggerModule } from 'nestjs-pino';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { CloudflareR2Module } from './common/cloudflare/cloudflare-r2.module';
 
 @Module({
   imports: [
@@ -35,6 +36,9 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
         BETTERSTACK_ENABLED: Joi.boolean().default(false),
         BETTERSTACK_TOKEN: Joi.string().optional(),
         BETTERSTACK_ENDPOINT: Joi.string().optional(),
+        CLOUD_FLARE_R2_ACCOUNT_ID: Joi.string().required(),
+        CLOUD_FLARE_R2_ACCESS_KEY_ID: Joi.string().required(),
+        CLOUD_FLARE_R2_SECRET_ACCESS_KEY: Joi.string().required(),
       }),
     }),
     LoggerModule.forRootAsync({
@@ -67,6 +71,8 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     RiderModule,
 
     DriverModule,
+
+    CloudflareR2Module.forRoot(),
   ],
   controllers: [AppController, RiderController],
   providers: [
