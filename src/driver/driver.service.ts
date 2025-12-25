@@ -9,12 +9,16 @@ import { UpdateDriverPersonalInfoDto } from './dto/update-personal-info.dto';
 import { UpdateDriverInfoDto } from './dto/driver-info.dto';
 import { CreateVehicleDto } from './dto/vehicle-info.dto';
 import { PinoLogger } from 'nestjs-pino';
+import { CloudflareR2Service } from 'src/common/cloudflare/cloudflare-r2.service';
+import { R2Bucket } from 'src/common/enums/bucket.enum';
+import { ALLOWED_DRIVER_DOCUMENT_TYPES } from 'src/common/constants/mime-types.constants';
 
 @Injectable()
 export class DriverService {
   constructor(
     private prisma: PrismaService,
     private readonly logger: PinoLogger,
+    private readonly r2Service: CloudflareR2Service,
   ) {}
 
   async createDriver(userId: string): Promise<Driver> {
@@ -82,6 +86,7 @@ export class DriverService {
   }
 
   async updatePersonalInfo(userId: string, dto: UpdateDriverPersonalInfoDto) {
+    this.logger.info({ userId }, 'Updating personal information');
     const user = await this.prisma.user.findUnique({
       where: { id: userId, deletedAt: null },
       include: { driver: true },
@@ -151,6 +156,7 @@ export class DriverService {
     licensePhoto: Express.Multer.File,
     profilePhoto: Express.Multer.File,
   ) {
+    this.logger.info({ userId }, 'Updating driver information');
     const user = await this.prisma.user.findUnique({
       where: { id: userId, deletedAt: null },
       include: { driver: true },
@@ -164,13 +170,32 @@ export class DriverService {
       throw new BadRequestException('User is not a driver');
     }
 
-    //TODO: upload to R2
+    const [licensePhotoUrl, profilePhotoUrl] = await Promise.all([
+      licensePhoto
+        ? this.r2Service.uploadFile(
+            licensePhoto,
+            'driver-documents',
+            R2Bucket.DRIVER_DOCUMENTS,
+            ALLOWED_DRIVER_DOCUMENT_TYPES,
+          )
+        : undefined,
+      profilePhoto
+        ? this.r2Service.uploadFile(
+            profilePhoto,
+            'driver-documents',
+            R2Bucket.DRIVER_DOCUMENTS,
+            ALLOWED_DRIVER_DOCUMENT_TYPES,
+          )
+        : undefined,
+    ]);
 
     // Update driver
     const updatedDriver = await this.prisma.driver.update({
       where: { id: user.driver.id },
       data: {
         ...(dto.licenseNumber && { licenseNumber: dto.licenseNumber }),
+        ...(licensePhotoUrl && { licensePhoto: licensePhotoUrl }),
+        ...(profilePhotoUrl && { profilePhoto: profilePhotoUrl }),
         onboardingStep: 2,
       },
     });
@@ -185,7 +210,6 @@ export class DriverService {
   }
 
   // add vehicle
-  //TODO: upload to R2
 
   async addVehicle(
     userId: string,
@@ -193,6 +217,7 @@ export class DriverService {
     exteriorFile?: Express.Multer.File,
     interiorFile?: Express.Multer.File,
   ) {
+    this.logger.info({ userId }, 'Adding vehicle');
     const user = await this.prisma.user.findUnique({
       where: { id: userId, deletedAt: null },
       include: { driver: { include: { vehicle: true } } },
@@ -209,13 +234,24 @@ export class DriverService {
     if (existingPlate)
       throw new BadRequestException('Plate number already registered');
 
-    const exteriorUrl = '';
-    const interiorUrl = '';
-    // 2. Upload photos
-    // const [exteriorUrl, interiorUrl] = await Promise.all([
-    //   exteriorFile ? this.r2Service.uploadFile(exteriorFile, 'vehicles') : null,
-    //   interiorFile ? this.r2Service.uploadFile(interiorFile, 'vehicles') : null,
-    // ]);
+    const [exteriorUrl, interiorUrl] = await Promise.all([
+      exteriorFile
+        ? this.r2Service.uploadFile(
+            exteriorFile,
+            'vehicles',
+            R2Bucket.DRIVER_DOCUMENTS,
+            ALLOWED_DRIVER_DOCUMENT_TYPES,
+          )
+        : undefined,
+      interiorFile
+        ? this.r2Service.uploadFile(
+            interiorFile,
+            'vehicles',
+            R2Bucket.DRIVER_DOCUMENTS,
+            ALLOWED_DRIVER_DOCUMENT_TYPES,
+          )
+        : undefined,
+    ]);
 
     return this.prisma.$transaction(async (tx) => {
       const vehicle = await tx.vehicle.create({
@@ -254,6 +290,7 @@ export class DriverService {
 
   // get car manufacturers
   async getManufacturers() {
+    this.logger.info('Getting car manufacturers');
     const manufacturers = await this.prisma.vehicleManufacturer.findMany({
       orderBy: { name: 'asc' },
     });
@@ -266,6 +303,7 @@ export class DriverService {
 
   // Get models by manufacturer
   async getModelsByManufacturer(manufacturerId: string) {
+    this.logger.info({ manufacturerId }, 'Getting models by manufacturer');
     const models = await this.prisma.vehicleModel.findMany({
       where: { manufacturerId },
       include: {
@@ -277,6 +315,111 @@ export class DriverService {
     return {
       statusCode: 200,
       data: models,
+    };
+  }
+
+  // Get driver profile
+  async getProfile(userId: string) {
+    this.logger.info({ userId }, 'Getting driver profile');
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId, deletedAt: null },
+      include: {
+        driver: {
+          include: {
+            vehicle: {
+              include: {
+                model: {
+                  include: {
+                    manufacturer: true,
+                  },
+                },
+              },
+            },
+            _count: {
+              select: {
+                rides: true,
+                ratingsReceived: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!user || !user.driver) {
+      throw new NotFoundException('Driver profile not found');
+    }
+
+    const driver = user.driver;
+
+    // Calculate average rating
+    const ratingsGroup = await this.prisma.rating.aggregate({
+      where: { ratedDriverId: driver.id },
+      _avg: { rating: true },
+    });
+    const averageRating = ratingsGroup._avg.rating || 0;
+
+    // Generate presigned URLs
+    const [
+      licensePhotoUrl,
+      profilePhotoUrl,
+      exteriorPhotoUrl,
+      interiorPhotoUrl,
+    ] = await Promise.all([
+      driver.licensePhoto
+        ? this.r2Service.getPresignedDownloadUrl(
+            R2Bucket.DRIVER_DOCUMENTS,
+            driver.licensePhoto,
+          )
+        : null,
+      driver.profilePhoto
+        ? this.r2Service.getPresignedDownloadUrl(
+            R2Bucket.DRIVER_DOCUMENTS,
+            driver.profilePhoto,
+          )
+        : null,
+      driver.vehicle?.exteriorPhoto
+        ? this.r2Service.getPresignedDownloadUrl(
+            R2Bucket.DRIVER_DOCUMENTS,
+            driver.vehicle.exteriorPhoto,
+          )
+        : null,
+      driver.vehicle?.interiorPhoto
+        ? this.r2Service.getPresignedDownloadUrl(
+            R2Bucket.DRIVER_DOCUMENTS,
+            driver.vehicle.interiorPhoto,
+          )
+        : null,
+    ]);
+
+    const { vehicle, ...driverData } = driver;
+
+    return {
+      statusCode: 200,
+      data: {
+        user: {
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phone: user.phone,
+          avatar: user.avatar,
+        },
+        driver: {
+          ...driverData,
+          licensePhoto: licensePhotoUrl,
+          profilePhoto: profilePhotoUrl,
+          totalRides: driver._count.rides,
+          totalRatings: driver._count.ratingsReceived,
+          averageRating: Number(averageRating.toFixed(1)),
+        },
+        vehicle: driver.vehicle
+          ? {
+              ...driver.vehicle,
+              exteriorPhoto: exteriorPhotoUrl,
+              interiorPhoto: interiorPhotoUrl,
+            }
+          : null,
+      },
     };
   }
 }

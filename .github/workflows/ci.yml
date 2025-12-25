@@ -13,7 +13,7 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_USER: testuser
-          POSTGRES_PASSWORD: testpass
+          POSTGRES_PASSWORD: ${{secrets.TEST_DB_PASSWORD}}
           POSTGRES_DB: testdb
         ports:
           - 5432:5432
@@ -23,12 +23,15 @@ jobs:
           --health-timeout=5s
           --health-retries=5
     env:
-      NODE_ENV: test
-      DATABASE_URL: postgresql://testuser:testpass@localhost:5432/testdb?schema=public
-      DIRECT_URL: postgresql://testuser:testpass@localhost:5432/testdb?schema=public
-      JWT_SECRET: jwt-scret
-      GOOGLE_CLIENT_ID: CLIENT_ID
-      LOG_LEVEL: warn
+      DATABASE_URL: ${{secrets.DATABASE_URL}}
+      DIRECT_URL: ${{secrets.DIRECT_URL}}
+      JWT_SECRET: ${{secrets.JWT_SECRET}}
+      GOOGLE_CLIENT_ID: ${{secrets.GOOGLE_CLIENT_ID}}
+      LOG_LEVEL: debug
+      BETTERSTACK_ENABLED: false
+      CLOUD_FLARE_R2_ACCESS_KEY_ID: ${{secrets.CLOUD_FLARE_R2_ACCESS_KEY_ID}}
+      CLOUD_FLARE_R2_SECRET_ACCESS_KEY: ${{secrets.CLOUD_FLARE_R2_SECRET_ACCESS_KEY}}
+      CLOUD_FLARE_R2_ACCOUNT_ID: ${{secrets.CLOUD_FLARE_R2_ACCOUNT_ID}}
 
     steps:
       - name: Checkout code

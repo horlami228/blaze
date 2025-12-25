@@ -172,4 +172,23 @@ describe('Driver (e2e)', () => {
     expect(statusRes.body.data.driver.onboardingCompleted).toBe(true);
     expect(statusRes.body.data.isComplete).toBe(true);
   });
+
+  it('GET /api/v1/driver/profile returns full driver profile with stats', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/driver/profile')
+      .set('Authorization', `Bearer ${authToken}`)
+      .expect(200);
+
+    expect(res.body.statusCode).toBe(200);
+    expect(res.body.data.user).toBeDefined();
+    expect(res.body.data.user.firstName).toBe('Driver');
+    expect(res.body.data.user.lastName).toBe('E2E');
+    expect(res.body.data.driver).toBeDefined();
+    expect(res.body.data.driver.licenseNumber).toBe('DL1234567890');
+    expect(res.body.data.driver.totalRides).toBeDefined();
+    expect(res.body.data.driver.totalRatings).toBeDefined();
+    expect(res.body.data.driver.averageRating).toBeDefined();
+    expect(res.body.data.vehicle).toBeDefined();
+    expect(res.body.data.vehicle.plateNumber).toBe('ABC-123-X');
+  });
 });
