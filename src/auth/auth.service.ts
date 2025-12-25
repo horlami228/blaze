@@ -11,6 +11,7 @@ import { PasswordUtil } from 'src/common/utils/password.utils';
 import { GoogleStrategy } from './strategy/google.strategy';
 import { GoogleLoginDto } from './dto/google-login-dto';
 import { DriverService } from 'src/driver/driver.service';
+import { PinoLogger } from 'nestjs-pino';
 
 @Injectable()
 export class AuthService {
@@ -20,6 +21,7 @@ export class AuthService {
     private riderService: RiderService,
     private googleStrategy: GoogleStrategy,
     private driverService: DriverService,
+    private readonly logger: PinoLogger,
   ) {}
 
   async registerRider(data: CreateRiderUserDto) {
@@ -54,6 +56,10 @@ export class AuthService {
     });
 
     if (existing) {
+      this.logger.warn(
+        { email: data.email, phone: data.phone },
+        'Registration failed - email or phone already in use',
+      );
       throw new BadRequestException(
         existing.email === data.email
           ? 'Email already in use'
@@ -73,6 +79,11 @@ export class AuthService {
       },
     });
 
+    this.logger.info(
+      { userId: user.id, role: user.role },
+      'User registered successfully',
+    );
+
     await onSuccess(user);
 
     return {
@@ -89,8 +100,11 @@ export class AuthService {
 
   // Login Service
   async login(email: string, plainPassword: string) {
+    this.logger.info({ email }, 'Login attempt');
+
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
+      this.logger.warn({ email }, 'Login failed - user not found');
       throw new UnauthorizedException('Email or Password Incorrect');
     }
 
@@ -99,15 +113,21 @@ export class AuthService {
       plainPassword,
     );
     if (!passwordValid) {
+      this.logger.warn(
+        { email, userId: user.id },
+        'Login failed - invalid password',
+      );
       throw new UnauthorizedException('Email or Password Incorrect');
     }
 
     // Generate JWT
-    //TODO: clean up here
-    console.log('user', user);
+
+    this.logger.debug({ userId: user.id }, 'Generating JWT for user');
     const payload = { sub: user.id, email: user.email, role: user.role };
     const token = this.jwtService.sign(payload);
-    console.log('JWT payload', payload);
+    this.logger.debug({ payload }, 'JWT payload signed');
+
+    this.logger.info({ userId: user.id }, 'User logged in successfully');
 
     return {
       statusCode: 201,
@@ -128,6 +148,7 @@ export class AuthService {
 
       // Extract user information from token
       const userInfo = this.googleStrategy.extractUserInfo(verified);
+      this.logger.info({ email: userInfo.email }, 'Google login attempt');
 
       // Check if user exists by email
       const existingUser = await this.prisma.user.findUnique({
@@ -208,6 +229,14 @@ export class AuthService {
         };
       }
     } catch (error) {
+      this.logger.error(
+        {
+          error: error.message,
+          stack: error.stack,
+          email: data.googleIdToken ? 'Google Token' : 'Unknown',
+        },
+        'Google authentication failure',
+      );
       if (
         error instanceof UnauthorizedException ||
         error instanceof BadRequestException

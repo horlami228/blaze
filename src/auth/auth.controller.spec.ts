@@ -116,7 +116,6 @@ describe('AuthController', () => {
         password: 'password123',
         firstName: 'John',
         lastName: 'Doe',
-        phone: '1234567890',
       };
 
       authService.registerDriver.mockResolvedValue(mockRegisterResponse);

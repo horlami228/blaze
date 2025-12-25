@@ -40,75 +40,139 @@ enum RideStatus {
   ONGOING
 }
 
-model User {
-  id          String    @id @default(uuid())
-  email       String    @unique
-  password    String?
-  role        UserRole  @default(RIDER)
-  isVerified  Boolean   @default(false)
-  phone       String?   @unique
-  avatar      String?
-  googleId    String?   @unique
-  firstName   String
-  lastName    String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+enum VehicleColor {
+  BLACK
+  WHITE
+  SILVER
+  GRAY
+  RED
+  BLUE
+  GREEN
+  YELLOW
+  ORANGE
+  BROWN
+  GOLD
+  BEIGE
+  PURPLE
+  OTHER
+}
 
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  password      String?
+  role          UserRole       @default(RIDER)
+  isVerified    Boolean        @default(false)
+  phone         String?        @unique
+  avatar        String?
+  googleId      String?        @unique
+  firstName     String?
+  dateOfBirth   DateTime?       @default(now())
+  gender        Gender?         @default(MALE)
+  lastName      String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  deletedAt     DateTime?
   driver        Driver?
   rider         Rider?
   notifications Notification[]
+
+  @@index([deletedAt])
 }
 
 model Driver {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id])
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Restrict)
   vehicle         Vehicle?
+  licenseNumber   String?
+  licensePhoto    String?
+  profilePhoto    String?
+    // Onboarding tracking
+  onboardingCompleted Boolean   @default(false)
+  onboardingStep      Int       @default(0)  // 0=not started, 1=personal info done, 2=driver done 3=vehicle done
+  
   rides           Ride[]
-  ratingsReceived Rating[] @relation("RatedDriver")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  ratingsReceived Rating[]  @relation("RatedDriver")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  @@index([deletedAt])
 }
 
 model Rider {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id])
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Restrict)
   rides           Ride[]
-  ratingsReceived Rating[] @relation("RatedRider")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  ratingsReceived Rating[]  @relation("RatedRider")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  @@index([deletedAt])
 }
 
+// Driver's Vehicle
 model Vehicle {
-  id               String      @id @default(uuid())
-  driverId         String      @unique
-  type             VehicleType
-  plateNumber      String      @unique
-  insuranceNumber  String?     @unique
+  id       String @id @default(uuid())
+  driverId String @unique
+  driver   Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  modelId String
+  model   VehicleModel @relation(fields: [modelId], references: [id], onDelete: Restrict)
+
+  color            VehicleColor
+  plateNumber      String       @unique
+  year             Int
+  insuranceNumber  String?      @unique
   insuranceCompany String?
-  driver           Driver      @relation(fields: [driverId], references: [id])
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-  rides            Ride[]
+
+  exteriorPhoto String?
+  interiorPhoto String?
+
+  isActive Boolean @default(true)
+
+  rides     Ride[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([isActive])
 }
 
 model Ride {
-  id            String     @id @default(uuid())
-  riderId       String
-  rider         Rider      @relation(fields: [riderId], references: [id])
-  driverId      String
-  driver        Driver     @relation(fields: [driverId], references: [id])
-  vehicleId     String
-  vehicle       Vehicle    @relation(fields: [vehicleId], references: [id])
-  startLocation String
-  endLocation   String
+  id        String  @id @default(uuid())
+  riderId   String
+  rider     Rider   @relation(fields: [riderId], references: [id], onDelete: Restrict)
+  driverId  String
+  driver    Driver  @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  vehicleId String
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+
+  // Pickup location
+  pickupLatitude  Float
+  pickupLongitude Float
+  pickupAddress   String
+
+  // Dropoff location
+  dropoffLatitude  Float
+  dropoffLongitude Float
+  dropoffAddress   String
+
   startDateTime DateTime
-  endDateTime   DateTime
+  endDateTime   DateTime?
   status        RideStatus @default(PENDING)
-  ratings       Rating[]
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  fare          Float?
+  distance      Float? // in kilometers
+
+  ratings   Rating[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([driverId, status, startDateTime])
+  @@index([riderId, status, startDateTime])
 }
 
 model Location {
@@ -121,25 +185,49 @@ model Location {
 }
 
 model Rating {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
   rideId        String
-  ride          Ride     @relation(fields: [rideId], references: [id])
+  ride          Ride      @relation(fields: [rideId], references: [id], onDelete: Cascade)
   ratedDriverId String?
-  ratedDriver   Driver?  @relation("RatedDriver", fields: [ratedDriverId], references: [id])
+  ratedDriver   Driver?   @relation("RatedDriver", fields: [ratedDriverId], references: [id], onDelete: Restrict)
   ratedRiderId  String?
-  ratedRider    Rider?   @relation("RatedRider", fields: [ratedRiderId], references: [id])
+  ratedRider    Rider?    @relation("RatedRider", fields: [ratedRiderId], references: [id], onDelete: Restrict)
   rating        Float
   comment       String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  @@index([ratedRiderId, deletedAt])
+  @@index([ratedDriverId, deletedAt])
 }
 
 model Notification {
   id        String   @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
   message   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model VehicleManufacturer {
+  id        String         @id @default(uuid())
+  name      String         @unique
+  models    VehicleModel[]
+  createdAt DateTime       @default(now())
+}
+
+model VehicleModel {
+  id             String              @id @default(uuid())
+  manufacturerId String
+  manufacturer   VehicleManufacturer @relation(fields: [manufacturerId], references: [id], onDelete: Restrict)
+  name           String
+  type           VehicleType
+  seats          Int                 @default(4)
+  createdAt      DateTime            @default(now())
+  vehicles       Vehicle[]
+
+  @@unique([manufacturerId, name])
 }
