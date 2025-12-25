@@ -23,12 +23,11 @@ jobs:
           --health-timeout=5s
           --health-retries=5
     env:
-      NODE_ENV: ${{secrets.NODE_ENV}}
       DATABASE_URL: ${{secrets.DATABASE_URL}}
       DIRECT_URL: ${{secrets.DIRECT_URL}}
       JWT_SECRET: ${{secrets.JWT_SECRET}}
       GOOGLE_CLIENT_ID: ${{secrets.GOOGLE_CLIENT_ID}}
-      LOG_LEVEL: ${{secrets.LOG_LEVEL}}
+      LOG_LEVEL: debug
       BETTERSTACK_ENABLED: false
       CLOUD_FLARE_R2_ACCESS_KEY_ID: ${{secrets.CLOUD_FLARE_R2_ACCESS_KEY_ID}}
       CLOUD_FLARE_R2_SECRET_ACCESS_KEY: ${{secrets.CLOUD_FLARE_R2_SECRET_ACCESS_KEY}}
