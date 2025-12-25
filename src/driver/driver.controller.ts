@@ -90,6 +90,53 @@ export class DriverController {
     return this.driverService.getOnboardingStatus(userId);
   }
 
+  // Get driver profile
+  @Get('profile')
+  @ApiOperation({ summary: 'Get full driver profile with statistics' })
+  @ApiResponse({
+    status: 200,
+    description: 'Return driver profile details',
+    schema: {
+      example: {
+        statusCode: 200,
+        data: {
+          user: {
+            firstName: 'Klaus',
+            lastName: 'Michealson',
+            email: 'test_driver@example.com',
+            phone: '8148912241',
+            avatar: null,
+          },
+          driver: {
+            id: '9ef02eb0-b268-4222-823d-91c1b1fe3ccf',
+            licenseNumber: 'NONASF90A0SD',
+            licensePhoto: 'https://r2.cloudflarestorage.com/...signed...',
+            profilePhoto: 'https://r2.cloudflarestorage.com/...signed...',
+            totalRides: 154,
+            totalRatings: 45,
+            averageRating: 4.8,
+            onboardingCompleted: true,
+          },
+          vehicle: {
+            id: '83eff568-e668-4f4a-a388-c7ec15ff42a9',
+            model: {
+              name: 'Corolla',
+              manufacturer: {
+                name: 'Toyota',
+              },
+            },
+            exteriorPhoto: 'https://r2.cloudflarestorage.com/...signed...',
+            interiorPhoto: 'https://r2.cloudflarestorage.com/...signed...',
+          },
+        },
+      },
+    },
+  })
+  async getProfile(@Request() req: any) {
+    const userId = req.user.sub;
+    return this.driverService.getProfile(userId);
+  }
+
   // Update personal info
   @Post('update-personal-info')
   @ApiOperation({ summary: 'Update basic personal information' })
