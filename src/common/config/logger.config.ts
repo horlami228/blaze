@@ -34,7 +34,15 @@ export const loggerConfigFactory = (configService: ConfigService): Params => {
                   },
                 },
               ]
-            : []),
+            : [
+                // 2. Production fallback: Standard JSON logs to stdout
+
+                {
+                  target: 'pino/file',
+                  level: logLevel,
+                  options: { destination: 1 }, // 1 is stdout
+                },
+              ]),
           // 2. Data Warehouse: Send to BetterStack if enabled and token is provided
           ...(betterstackEnabled && betterstackToken
             ? [

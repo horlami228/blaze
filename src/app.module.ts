@@ -26,7 +26,7 @@ import { CloudflareR2Module } from './common/cloudflare/cloudflare-r2.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: `.env.${process.env.NODE_ENV || 'dev'}`,
+      envFilePath: `.env.${process.env.NODE_ENV || 'development'}`,
       validationSchema: Joi.object({
         DATABASE_URL: Joi.string().uri().required(),
         DIRECT_URL: Joi.string().uri().required(),
