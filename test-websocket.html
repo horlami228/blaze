@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Notification Tester</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+      body {
+        font-family:
+          'Inter',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        background-color: #0f172a;
+        color: #f8fafc;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        margin: 0;
+      }
+
+      .container {
+        background: rgba(30, 41, 59, 0.7);
+        backdrop-filter: blur(10px);
+        padding: 2rem;
+        border-radius: 1rem;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        width: 400px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      h1 {
+        font-size: 1.5rem;
+        margin-bottom: 1.5rem;
+        text-align: center;
+        color: #38bdf8;
+      }
+
+      .input-group {
+        margin-bottom: 1rem;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+        color: #94a3b8;
+      }
+
+      input {
+        width: 100%;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        border: 1px solid #334155;
+        background: #1e293b;
+        color: white;
+        box-sizing: border-box;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+
+      input:focus {
+        border-color: #38bdf8;
+      }
+
+      button {
+        width: 100%;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        border: none;
+        background: #38bdf8;
+        color: #0f172a;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      button:hover {
+        background: #0ea5e9;
+      }
+
+      .status {
+        margin-top: 1rem;
+        text-align: center;
+        font-size: 0.875rem;
+      }
+
+      .status.connected {
+        color: #10b981;
+      }
+      .status.disconnected {
+        color: #ef4444;
+      }
+
+      .unread-count {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 2rem;
+        padding: 1rem;
+        background: #334155;
+        border-radius: 0.5rem;
+      }
+
+      .count-badge {
+        background: #ef4444;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-weight: bold;
+      }
+
+      #notifications-log {
+        margin-top: 1.5rem;
+        max-height: 200px;
+        overflow-y: auto;
+        font-size: 0.875rem;
+        border-top: 1px solid #334155;
+        padding-top: 1rem;
+      }
+
+      .notification-item {
+        padding: 0.5rem;
+        border-bottom: 1px solid #1e293b;
+        animation: fadeIn 0.3s ease-out;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Notification Tester</h1>
+
+      <div class="input-group">
+        <label for="token">Auth Token</label>
+        <input type="text" id="token" placeholder="Paste your JWT here" />
+      </div>
+
+      <button id="connect-btn">Connect to Gateway</button>
+
+      <div id="status" class="status disconnected">Disconnected</div>
+
+      <div class="unread-count">
+        <span>Unread Notifications</span>
+        <span id="count" class="count-badge">0</span>
+      </div>
+
+      <div id="notifications-log">
+        <!-- Notifications will appear here -->
+      </div>
+    </div>
+
+    <script>
+      let socket;
+      const tokenInput = document.getElementById('token');
+      const connectBtn = document.getElementById('connect-btn');
+      const statusDiv = document.getElementById('status');
+      const countSpan = document.getElementById('count');
+      const logDiv = document.getElementById('notifications-log');
+
+      connectBtn.onclick = () => {
+        const token = tokenInput.value.trim();
+        if (!token) {
+          alert('Please enter a token');
+          return;
+        }
+
+        if (socket) socket.disconnect();
+
+        // Connect to the /notifications namespace
+        socket = io('http://localhost:9000/rides', {
+          auth: { token },
+        });
+
+        socket.on('connect', () => {
+          statusDiv.textContent = 'Connected';
+          statusDiv.className = 'status connected';
+          console.log('Connected to websocket');
+        });
+
+        socket.on('disconnect', () => {
+          statusDiv.textContent = 'Disconnected';
+          statusDiv.className = 'status disconnected';
+        });
+
+        socket.on('connect_error', (err) => {
+          statusDiv.textContent = 'Connection Error: ' + err.message;
+          statusDiv.className = 'status disconnected';
+          console.error('Socket error:', err);
+        });
+
+        socket.on('unreadCount', (data) => {
+          countSpan.textContent = data.count;
+        });
+
+        socket.on('notification', (noti) => {
+          const item = document.createElement('div');
+          console.log(noti);
+          item.className = 'notification-item';
+          item.innerHTML = `<strong>${noti.title}</strong>: ${noti.message}`;
+          logDiv.prepend(item);
+
+          // Native Browser Notification if permitted
+          if (Notification.permission === 'granted') {
+            new Notification(noti.title, { body: noti.message });
+          }
+        });
+      };
+
+      // Request notification permission
+      if (Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
+    </script>
+  </body>
+</html>
