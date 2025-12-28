@@ -50,6 +50,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
       requestId: (request as any).id,
       ip: clientIp,
       userAgent: request.headers['user-agent'],
+      // Include the full response details in the backend logs
+      errorDetails:
+        typeof exceptionResponse === 'object' ? exceptionResponse : undefined,
     };
 
     if (status >= 500) {
@@ -122,19 +125,25 @@ export class HttpExceptionFilter implements ExceptionFilter {
       requestId: (request as any).id, // ✅ For support tickets and log correlation
     };
 
-    // if (isDevelopment) {
-    //   // DEVELOPMENT: Return detailed errors for debugging
-    //   return {
-    //     ...baseResponse,
-    //     message: detailedMessage,
-    //     path: request.url,
-    //     method: request.method,
-    //     ...(status >= 500 && {
-    //       stack: exception instanceof Error ? exception.stack : undefined,
-    //       errorName: exception instanceof Error ? exception.name : undefined,
-    //     }),
-    //   };
-    // }
+    if (isDevelopment) {
+      // DEVELOPMENT: Return detailed errors for debugging
+      // If the original exception response is an object (like DTO errors), merge it
+      const originalError =
+        exception instanceof HttpException ? exception.getResponse() : {};
+
+      return {
+        ...baseResponse,
+        message: detailedMessage,
+        // In dev, if the original error was an object (e.g. DTO validation array), show it
+        ...(typeof originalError === 'object' ? originalError : {}),
+        path: request.url,
+        method: request.method,
+        ...(status >= 500 && {
+          stack: exception instanceof Error ? exception.stack : undefined,
+          errorName: exception instanceof Error ? exception.name : undefined,
+        }),
+      };
+    }
 
     // PRODUCTION: Return generic messages - prevent information leakage
     const genericMessages: Record<number, string> = {

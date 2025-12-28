@@ -39,7 +39,7 @@ export class DriverController {
   constructor(private readonly driverService: DriverService) {}
 
   // Get onboarding status
-  @Get('onboarding-status')
+  @Get('onboarding/status')
   @ApiOperation({ summary: 'Get current onboarding status of the driver' })
   @ApiResponse({
     status: 200,
@@ -138,7 +138,7 @@ export class DriverController {
   }
 
   // Update personal info
-  @Post('update-personal-info')
+  @Post('onboarding/personal-info')
   @ApiOperation({ summary: 'Update basic personal information' })
   @ApiResponse({
     status: 200,
@@ -169,7 +169,7 @@ export class DriverController {
   }
 
   // Update driver info
-  @Post('update-driver-info')
+  @Post('onboarding/driver-info')
   @ApiOperation({ summary: 'Update driver license information and photos' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: UpdateDriverInfoDto })
@@ -237,7 +237,7 @@ export class DriverController {
   }
 
   // Add vehicle
-  @Post('add-vehicle')
+  @Post('onboarding/vehicle-info')
   @ApiOperation({ summary: 'Add vehicle information and photos' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ type: CreateVehicleDto })
@@ -313,7 +313,7 @@ export class DriverController {
   }
 
   // Get manufacturer
-  @Get('manufacturer')
+  @Get('manufacturers')
   @ApiOperation({ summary: 'Get list of available vehicle manufacturers' })
   @ApiResponse({
     status: 200,

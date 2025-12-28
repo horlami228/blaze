@@ -67,6 +67,8 @@ describe('DriverController', () => {
   describe('updatePersonalInfo', () => {
     it('should call service with DTO and return result', async () => {
       const dto: UpdateDriverPersonalInfoDto = {
+        firstName: 'John',
+        lastName: 'Doe',
         phone: '1234567890',
         gender: Gender.MALE,
         dateOfBirth: new Date(),
