@@ -168,6 +168,8 @@ describe('DriverService', () => {
 
   describe('updatePersonalInfo', () => {
     const dto: UpdateDriverPersonalInfoDto = {
+      firstName: 'John',
+      lastName: 'Doe',
       phone: '0987654321',
       gender: Gender.FEMALE,
       dateOfBirth: new Date('1995-05-05'),

@@ -3,6 +3,8 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
+import { ZodValidationPipe } from 'nestjs-zod';
+
 import helmet from 'helmet';
 
 async function bootstrap() {
@@ -27,31 +29,33 @@ async function bootstrap() {
     }),
   );
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: {
-        enableImplicitConversion: true,
-      },
-      exceptionFactory: (errors) => {
-        if (process.env.NODE_ENV === 'production') {
-          // Don't leak validation details in production
-          throw new BadRequestException('Invalid request data');
-        }
-        // In development, return detailed validation errors
-        const messages = errors.map((error) => ({
-          field: error.property,
-          errors: Object.values(error.constraints || {}),
-        }));
-        throw new BadRequestException({
-          message: 'Validation failed',
-          errors: messages,
-        });
-      },
-    }),
-  );
+  // app.useGlobalPipes(
+  //   new ValidationPipe({
+  //     whitelist: true,
+  //     forbidNonWhitelisted: true,
+  //     transform: true,
+  //     transformOptions: {
+  //       enableImplicitConversion: true,
+  //     },
+  //     exceptionFactory: (errors) => {
+  //       if (process.env.NODE_ENV === 'production') {
+  //         // Don't leak validation details in production
+  //         throw new BadRequestException('Invalid request data');
+  //       }
+  //       // In development, return detailed validation errors
+  //       const messages = errors.map((error) => ({
+  //         field: error.property,
+  //         errors: Object.values(error.constraints || {}),
+  //       }));
+  //       throw new BadRequestException({
+  //         message: 'Validation failed',
+  //         errors: messages,
+  //       });
+  //     },
+  //   }),
+  // );
+
+  app.useGlobalPipes(new ZodValidationPipe());
 
   app.enableCors();
   // Disable Express fingerprinting

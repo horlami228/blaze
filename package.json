@@ -1,5 +1,5 @@
 {
-  "name": "nestjs-starter-template",
+  "name": "blaze",
   "version": "0.0.1",
   "description": "",
   "author": "",
@@ -28,12 +28,16 @@
     "heroku-postbuild": "yarn build",
     "prepare": "husky"
   },
+  "workspaces": [
+    "src/shared"
+  ],
   "prisma": {
     "seed": "tsx prisma/seed/index.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.958.0",
     "@aws-sdk/s3-request-presigner": "^3.958.0",
+    "@blaze/shared": "*",
     "@logtail/pino": "^0.5.7",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^4.0.2",
@@ -53,6 +57,7 @@
     "helmet": "^8.1.0",
     "joi": "^18.0.2",
     "nestjs-pino": "^4.5.0",
+    "nestjs-zod": "^5.0.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.16.3",
@@ -103,7 +108,7 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.ts$": "ts-jest"
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"

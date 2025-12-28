@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { ZodValidationPipe } from 'nestjs-zod';
 
 describe('Auth (e2e)', () => {
   let app: INestApplication;
@@ -14,13 +15,8 @@ describe('Auth (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    );
+
+    app.useGlobalPipes(new ZodValidationPipe());
     await app.init();
 
     prisma = app.get(PrismaService);
