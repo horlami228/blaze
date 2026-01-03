@@ -20,6 +20,10 @@ export abstract class BaseGateway
   }
 
   async handleConnection(client: Socket) {
+    const port = process.env.PORT;
+    this.logger.info(
+      `New connection on PORT: ${port} for user: ${client.data.user.sub}`,
+    );
     const user = client.data.user;
 
     if (!user) {
@@ -30,8 +34,8 @@ export abstract class BaseGateway
 
     const userId = user.sub || user.id;
 
-    // 🚀 THE MAGIC: Join a room unique to the User ID
-    // This removes the need for this.userSockets Map!
+    // Join a room unique to the User ID
+
     await client.join(`user_${userId}`);
 
     this.logger.info(

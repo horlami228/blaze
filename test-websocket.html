@@ -185,8 +185,9 @@
         if (socket) socket.disconnect();
 
         // Connect to the /notifications namespace
-        socket = io('http://localhost:9000/rides', {
+        socket = io('http://localhost:8080/rides', {
           auth: { token },
+          transports: ['websocket'],
         });
 
         socket.on('connect', () => {
