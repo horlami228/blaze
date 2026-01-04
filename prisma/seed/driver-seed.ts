@@ -1,4 +1,5 @@
 import { PrismaClient, UserRole, VehicleColor } from '@prisma/client';
+import { PasswordUtil } from 'src/common/utils/password.utils';
 import * as bcrypt from 'bcrypt';
 import Redis from 'ioredis';
 
@@ -122,7 +123,7 @@ const driverProfiles = [
 
 export async function seedDrivers() {
   try {
-    const hashedPassword = await bcrypt.hash('password123', 10);
+    const hashedPassword = await PasswordUtil.hash('password');
 
     for (let i = 0; i < driverProfiles.length; i++) {
       const profile = driverProfiles[i];
@@ -130,16 +131,23 @@ export async function seedDrivers() {
 
       // 1. Create or Update User
       const user = await prisma.user.upsert({
-        where: { email: profile.email },
-        update: {},
+        where: { email: profile.email, deletedAt: null },
+        update: {
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          phone: profile.phone,
+          password: hashedPassword, // Optional: might not want to reset password every seed
+          role: UserRole.DRIVER,
+          isVerified: true,
+        },
         create: {
           email: profile.email,
-          firstName: profile.firstName,
+          firstName: 'colins',
           lastName: profile.lastName,
           phone: profile.phone,
           password: hashedPassword,
           role: UserRole.DRIVER,
-          isVerified: true,
+          isVerified: false,
         },
       });
 

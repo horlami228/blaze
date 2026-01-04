@@ -10,6 +10,7 @@ import { RedisService } from 'src/redis/redis.service';
 import { Driver, RideStatus } from '@prisma/client';
 import { UpdateDriverLocationDto } from 'src/driver/dto/update-driver-location-dto';
 import { RequestRideDto } from './dto/request-ride-dto';
+import { RidesGateway } from './rides.gateway';
 @Injectable()
 export class RideService {
   private readonly BASE_FARE = 500; // Base fare in your currency
@@ -21,6 +22,7 @@ export class RideService {
     private readonly prisma: PrismaService,
     private readonly logger: PinoLogger,
     private readonly redis: RedisService,
+    private readonly rideGateway: RidesGateway,
   ) {
     this.logger.setContext(RideService.name);
   }
@@ -333,9 +335,61 @@ export class RideService {
       'Ride Created and assigned',
     );
 
+    // send ride notification to driver so the can accept it
+    this.rideGateway.sendNewRideNotification(ride.driver.user.id, ride);
+
     return {
       message: 'Ride created and assigned',
       data: { ride, estiamtedRoadDistance, estimatedFare },
+    };
+  }
+
+  // accept a ride
+  async acceptRide(userId: string, rideId: string) {
+    this.logger.info({ userId, rideId }, 'Accepting ride');
+
+    const driver = await this.prisma.driver.findFirst({
+      where: { userId, deletedAt: null },
+    });
+    if (!driver) {
+      this.logger.error({ userId }, 'Driver not found');
+      throw new NotFoundException('Driver not found');
+    }
+    const ride = await this.prisma.ride.findUnique({
+      where: { id: rideId },
+      include: { driver: true, rider: { include: { user: true } } },
+    });
+
+    if (!ride) {
+      this.logger.error({ rideId }, 'Ride not found');
+      throw new NotFoundException('Ride not found');
+    }
+
+    if (ride.driverId !== driver.id) {
+      this.logger.error(
+        { rideId, driverId: ride.driverId, userId },
+        'Driver does not match',
+      );
+      throw new BadRequestException('Driver does not match');
+    }
+
+    if (ride.status != RideStatus.PENDING) {
+      this.logger.error({ rideId, status: ride.status }, 'Ride is not pending');
+      throw new BadRequestException('Ride is not pending');
+    }
+
+    const updatedRide = await this.prisma.ride.update({
+      where: { id: rideId },
+      data: { status: RideStatus.ACCEPTED },
+      include: {
+        driver: { include: { user: true, vehicle: true } },
+        rider: { include: { user: true } },
+      },
+    });
+
+    return {
+      message: 'Ride accepted',
+      data: updatedRide,
     };
   }
 

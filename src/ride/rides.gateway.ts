@@ -4,6 +4,7 @@ import { BaseGateway } from 'src/auth/websocket/base.gateway';
 import { PinoLogger } from 'nestjs-pino';
 import { Server } from 'socket.io';
 import { SocketAuthMiddleware } from 'src/auth/websocket/socket-auth-middleware';
+import { Ride } from '@prisma/client';
 @WebSocketGateway({
   cors: { origin: '*' },
   namespace: 'rides',
@@ -26,5 +27,9 @@ export class RidesGateway extends BaseGateway {
     notification: { title: string; message: string },
   ) {
     this.emitToUser(userId, 'notification', notification);
+  }
+
+  sendNewRideNotification(userId: string, ride: Ride) {
+    this.emitToUser(userId, 'new-ride', ride);
   }
 }
