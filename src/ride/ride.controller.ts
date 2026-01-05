@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post, Request } from '@nestjs/common';
+import { Body, Controller, Param, Post, Patch, Request } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -199,7 +199,7 @@ export class RideController {
     return await this.rideService.requestRide(userId, dto);
   }
 
-  @Post('accept-ride/:rideId')
+  @Patch('accept-ride/:rideId')
   @ApiOperation({ summary: 'Accept a ride' })
   @ApiResponse({
     status: 201,
@@ -311,5 +311,127 @@ export class RideController {
     const userId = req.user.sub;
 
     return await this.rideService.acceptRide(userId, rideId);
+  }
+
+  @Patch('start-ride/:rideId')
+  @ApiOperation({ summary: 'Start a ride' })
+  @ApiResponse({
+    status: 201,
+    description: 'Ride started successfully',
+    schema: {
+      example: {
+        message: 'Ride started',
+        data: {
+          id: 'bd114316-0f52-4cff-952c-1dfa7440813b',
+          riderId: 'a1a5c43c-957b-40a8-a0d7-e615d99fe7ad',
+          driverId: '40678f34-cd79-4397-9203-47389f1e6243',
+          vehicleId: 'c365d7a5-a714-40e6-859c-c319c30f0cd5',
+          pickupLatitude: '6.514656',
+          pickupLongitude: '3.490738',
+          pickupAddress: 'Third Mainland Bridge',
+          dropoffLatitude: '6.460058',
+          dropoffLongitude: '3.459315',
+          dropoffAddress: 'Banana Island, Eti Osa, Nigeria',
+          startDateTime: '2026-01-04T21:27:34.827Z',
+          endDateTime: null,
+          status: 'ONGOING',
+          fare: 1810.63,
+          distance: '8.74',
+          path_json: [],
+          createdAt: '2026-01-04T21:18:45.873Z',
+          updatedAt: '2026-01-04T21:27:34.830Z',
+          driver: {
+            id: '40678f34-cd79-4397-9203-47389f1e6243',
+            user: {
+              firstName: 'Tunde',
+              lastName: 'Bakare',
+              phone: '+2348022222222',
+              avatar: null,
+            },
+            vehicle: {
+              plateNumber: 'ABC-456-XY',
+              model: {
+                id: 'abcca413-b6ba-4d2d-a987-fcb454a314d6',
+                manufacturerId: 'e64941b5-9202-48b5-b6d0-6cda53851317',
+                name: 'Corolla',
+                type: 'SEDAN',
+                seats: 4,
+                createdAt: '2025-12-19T18:42:18.114Z',
+              },
+              color: 'SILVER',
+            },
+          },
+          rider: {
+            id: 'a1a5c43c-957b-40a8-a0d7-e615d99fe7ad',
+            user: {
+              firstName: 'Jeremy',
+              lastName: 'Doku',
+              phone: '+12345678897',
+              avatar: null,
+            },
+          },
+        },
+      },
+    },
+  })
+  async startRide(@Param('rideId') rideId: string, @Request() req) {
+    const userId = req.user.sub;
+
+    return await this.rideService.startRide(userId, rideId);
+  }
+
+  @Patch('cancel-ride/:rideId')
+  @ApiOperation({ summary: 'Cancel a ride' })
+  @ApiResponse({
+    status: 201,
+    description: 'Ride canceled successfully',
+    schema: {
+      example: {
+        message: 'Ride canceled',
+        data: {
+          id: '49c5345c-70d9-4f4c-a4b0-b41aef8f7b81',
+          riderId: 'a1a5c43c-957b-40a8-a0d7-e615d99fe7ad',
+          driverId: '40678f34-cd79-4397-9203-47389f1e6243',
+          vehicleId: 'c365d7a5-a714-40e6-859c-c319c30f0cd5',
+          pickupLatitude: '6.514656',
+          pickupLongitude: '3.490738',
+          pickupAddress: 'Third Mainland Bridge',
+          dropoffLatitude: '6.460058',
+          dropoffLongitude: '3.459315',
+          dropoffAddress: 'Banana Island, Eti Osa, Nigeria',
+          startDateTime: '2026-01-05T09:32:08.367Z',
+          endDateTime: null,
+          status: 'CANCELLED',
+          fare: 1810.63,
+          distance: '8.74',
+          path_json: [],
+          createdAt: '2026-01-05T09:31:21.969Z',
+          updatedAt: '2026-01-05T09:33:40.345Z',
+        },
+      },
+    },
+  })
+  async cancelRide(@Param('rideId') rideId: string, @Request() req) {
+    const userId = req.user.sub;
+
+    return await this.rideService.cancelRide(userId, rideId);
+  }
+
+  @Patch('complete-ride/:rideId')
+  @ApiOperation({ summary: 'Complete a ride' })
+  @ApiResponse({
+    status: 201,
+    description: 'Ride completed successfully',
+    schema: {
+      example: {
+        message: 'Ride completed',
+        data: {},
+      },
+    },
+  })
+  async completeRide(@Param('rideId') rideId: string, @Request() req) {
+    const userId = req.user.sub;
+
+    return await this.rideService.completeRide(userId, rideId);
   }
 }

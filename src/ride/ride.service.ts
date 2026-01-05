@@ -51,7 +51,7 @@ export class RideService {
     await this.redis.client
       .pipeline()
       .hset(`driver:${driver.id}:location`, dto)
-      .expire(`driver:${driver.id}:location`, 1000)
+      .expire(`driver:${driver.id}:location`, 30)
       .exec();
 
     // update db every 30 seconds
@@ -70,8 +70,10 @@ export class RideService {
       await this.redis.client.setex(lockKey, 30, 'locked');
     }
 
-    // // if driver has active ride store in ride path
-    const activeRide = await this.getActiveRideForDriver(driver.id);
+    // if driver has active ride store in ride path
+    const activeRide = await this.getActiveRideForDriver(driver.id, [
+      'ONGOING',
+    ]);
 
     if (activeRide) {
       const pathKey = `ride:${activeRide.id}:path`;
@@ -188,13 +190,21 @@ export class RideService {
       }
     } else {
       // driver is  going offline
-      const activeRides = await this.getActiveRideForDriver(driver.id);
+      const activeRides = await this.getActiveRideForDriver(driver.id, [
+        'ACCEPTED',
+        'PENDING',
+        'ONGOING',
+      ]);
       // check if driver has active rides
       if (activeRides) {
         this.logger.error({ userId }, 'Driver has active ride');
         throw new BadRequestException('Driver has active ride');
       }
-      await this.redis.client.zrem('available_drivers', driver.id);
+      await this.redis.client
+        .pipeline()
+        .zrem('available_drivers', driver.id)
+        .del(`driver:${driver.id}:location`)
+        .exec();
     }
 
     // fallback mechanism if update fails
@@ -212,7 +222,11 @@ export class RideService {
       );
       if (newStatus === true) {
         // tried going online but failed
-        await this.redis.client.zrem('available_drivers', driver.id);
+        await this.redis.client
+          .pipeline()
+          .zrem('available_drivers', driver.id)
+          .del(`driver:${driver.id}:location`)
+          .exec();
       } else {
         // tried going offline but failed
         await this.redis.client.geoadd(
@@ -393,13 +407,155 @@ export class RideService {
     };
   }
 
+  // Start a ride
+  async startRide(userId: string, rideId: string) {
+    this.logger.info({ userId, rideId }, 'Starting ride');
+
+    const driver = await this.prisma.driver.findFirst({
+      where: { userId, deletedAt: null },
+    });
+
+    if (!driver) {
+      throw new NotFoundException('Driver not found');
+    }
+
+    const ride = await this.prisma.ride.findUnique({
+      where: { id: rideId },
+    });
+
+    if (!ride) {
+      throw new NotFoundException('Ride not found');
+    }
+
+    if (ride.driverId !== driver.id) {
+      throw new BadRequestException('This ride is not assigned to you');
+    }
+
+    if ((ride.status as RideStatus) === RideStatus.ONGOING) {
+      throw new BadRequestException('Ride is already ongoing');
+    }
+
+    if ((ride.status as RideStatus) !== RideStatus.ACCEPTED) {
+      throw new BadRequestException('Ride must be accepted before starting');
+    }
+
+    const updatedRide = await this.prisma.ride.update({
+      where: { id: rideId },
+      data: {
+        status: RideStatus.ONGOING,
+        startDateTime: new Date(),
+      },
+      include: {
+        driver: {
+          select: {
+            id: true,
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+                phone: true,
+                avatar: true,
+              },
+            },
+            vehicle: {
+              select: {
+                plateNumber: true,
+                model: true,
+                color: true,
+              },
+            },
+          },
+        },
+        rider: {
+          select: {
+            id: true,
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+                phone: true,
+                avatar: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      message: 'Ride started',
+      data: updatedRide,
+    };
+  }
+
+  // cancel a ride
+  //TODO: rider can cancel a ride
+  async cancelRide(userId: string, rideId: string) {
+    const driver = await this.prisma.driver.findFirst({
+      where: { userId, deletedAt: null },
+    });
+    if (!driver) {
+      throw new NotFoundException('Driver not found');
+    }
+    const ride = await this.prisma.ride.findUnique({
+      where: { id: rideId },
+    });
+    if (!ride) {
+      throw new NotFoundException('Ride not found');
+    }
+    if (ride.driverId !== driver.id) {
+      throw new BadRequestException('This ride is not assigned to you');
+    }
+    if ((ride.status as RideStatus) !== RideStatus.ACCEPTED) {
+      throw new BadRequestException('Ride must be accepted before canceling');
+    }
+    const updatedRide = await this.prisma.ride.update({
+      where: { id: rideId },
+      data: { status: RideStatus.CANCELLED },
+    });
+    return {
+      message: 'Ride canceled',
+      data: updatedRide,
+    };
+  }
+
+  // complete a ride
+  async completeRide(userId: string, rideId: string) {
+    const driver = await this.prisma.driver.findFirst({
+      where: { userId, deletedAt: null },
+    });
+    if (!driver) {
+      throw new NotFoundException('Driver not found');
+    }
+    const ride = await this.prisma.ride.findUnique({
+      where: { id: rideId },
+    });
+    if (!ride) {
+      throw new NotFoundException('Ride not found');
+    }
+    if (ride.driverId !== driver.id) {
+      throw new BadRequestException('This ride is not assigned to you');
+    }
+    if ((ride.status as RideStatus) !== RideStatus.ONGOING) {
+      throw new BadRequestException('Ride must be ongoing before completing');
+    }
+    const updatedRide = await this.prisma.ride.update({
+      where: { id: rideId },
+      data: { status: RideStatus.COMPLETED, endDateTime: new Date() },
+    });
+    return {
+      message: 'Ride completed',
+      data: updatedRide,
+    };
+  }
+
   // HELPER METHODS
-  private async getActiveRideForDriver(driverId: string) {
+  private async getActiveRideForDriver(driverId: string, status: RideStatus[]) {
     return await this.prisma.ride.findFirst({
       where: {
         driverId,
         status: {
-          in: [RideStatus.PENDING, RideStatus.ACCEPTED, RideStatus.ONGOING],
+          in: status,
         },
       },
     });
@@ -449,11 +605,63 @@ export class RideService {
       .exec();
   }
 
+  // private async findNearbyDrivers(latitude: number, longitude: number) {
+  //   const maxRadius = Math.max(...this.SEARCH_RADIUS_LEVELS);
+
+  //   // Returns [[driverId, distance], [driverId, distance], ...]
+  //   // Note: georadius arguments: key, longitude, latitude, radius, unit, "WITHDIST", "ASC"
+  //   const driversWithDistance: [string, string][] =
+  //     (await this.redis.client.georadius(
+  //       'available_drivers',
+  //       longitude,
+  //       latitude,
+  //       maxRadius,
+  //       'km',
+  //       'WITHDIST',
+  //       'ASC',
+  //     )) as [string, string][];
+
+  //   if (!driversWithDistance || driversWithDistance.length === 0) {
+  //     return [];
+  //   }
+
+  //   // Create a map for quick distance lookups
+  //   const driverDistances = new Map<string, number>();
+  //   const driverIds = driversWithDistance.map(([id, distance]) => {
+  //     driverDistances.set(id, parseFloat(distance));
+  //     return id;
+  //   });
+
+  //   // Fetch full driver details from Postgres
+  //   const drivers = await this.prisma.driver.findMany({
+  //     where: {
+  //       id: { in: driverIds },
+  //       isOnline: true,
+  //       onboardingCompleted: true,
+  //       deletedAt: null,
+  //     },
+  //     include: {
+  //       vehicle: {
+  //         include: {
+  //           model: { include: { manufacturer: true } },
+  //         },
+  //       },
+  //       user: true,
+  //     },
+  //   });
+
+  //   // Attach distance and sort
+  //   return drivers
+  //     .map((driver) => ({
+  //       ...driver,
+  //       distanceFromPickUp: driverDistances.get(driver.id) || 0,
+  //     }))
+  //     .sort((a, b) => a.distanceFromPickUp - b.distanceFromPickUp);
+  // }
+
   private async findNearbyDrivers(latitude: number, longitude: number) {
     const maxRadius = Math.max(...this.SEARCH_RADIUS_LEVELS);
 
-    // Returns [[driverId, distance], [driverId, distance], ...]
-    // Note: georadius arguments: key, longitude, latitude, radius, unit, "WITHDIST", "ASC"
     const driversWithDistance: [string, string][] =
       (await this.redis.client.georadius(
         'available_drivers',
@@ -465,36 +673,54 @@ export class RideService {
         'ASC',
       )) as [string, string][];
 
-    if (!driversWithDistance || driversWithDistance.length === 0) {
-      return [];
-    }
+    if (!driversWithDistance || driversWithDistance.length === 0) return [];
 
-    // Create a map for quick distance lookups
-    const driverDistances = new Map<string, number>();
-    const driverIds = driversWithDistance.map(([id, distance]) => {
-      driverDistances.set(id, parseFloat(distance));
-      return id;
+    // 1. FILTER BY HEARTBEAT
+    // We check which drivers actually have a live 'location' key in Redis
+    const pipeline = this.redis.client.pipeline();
+    driversWithDistance.forEach(([id]) => {
+      pipeline.exists(`driver:${id}:location`);
     });
 
-    // Fetch full driver details from Postgres
+    const heartbeatResults = await pipeline.exec();
+
+    // 2. Identify "Alive" drivers and "Zombies"
+    const aliveDriverIds: string[] = [];
+    const zombieDriverIds: string[] = [];
+    const driverDistances = new Map<string, number>();
+
+    driversWithDistance.forEach(([id, dist], index) => {
+      const isAlive = heartbeatResults[index][1] === 1; // 1 means key exists
+      if (isAlive) {
+        aliveDriverIds.push(id);
+        driverDistances.set(id, parseFloat(dist));
+      } else {
+        zombieDriverIds.push(id);
+      }
+    });
+
+    // 3. CLEAN UP (Optional but recommended)
+    // Remove zombies from the geo-set so the next search is faster
+    if (zombieDriverIds.length > 0) {
+      await this.redis.client.zrem('available_drivers', ...zombieDriverIds);
+    }
+
+    if (aliveDriverIds.length === 0) return [];
+
+    // 4. FETCH REMAINING FROM DB
     const drivers = await this.prisma.driver.findMany({
       where: {
-        id: { in: driverIds },
-        isOnline: true,
+        id: { in: aliveDriverIds },
+        isOnline: true, // Double protection
         onboardingCompleted: true,
         deletedAt: null,
       },
       include: {
-        vehicle: {
-          include: {
-            model: { include: { manufacturer: true } },
-          },
-        },
+        vehicle: { include: { model: { include: { manufacturer: true } } } },
         user: true,
       },
     });
 
-    // Attach distance and sort
     return drivers
       .map((driver) => ({
         ...driver,

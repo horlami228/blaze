@@ -253,7 +253,7 @@
           const response = await fetch(
             `http://localhost:9000/api/v1/ride/accept-ride/${rideId}`,
             {
-              method: 'POST',
+              method: 'PATCH', // Updated to PATCH
               headers: {
                 Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json',
@@ -266,14 +266,206 @@
           if (response.ok) {
             alert('Success: ' + data.message);
             if (btn) {
-              btn.textContent = 'Accepted ✅';
-              btn.style.backgroundColor = '#64748b';
+              const container = btn.parentElement;
+
+              // Create Start Button (repurposing existing button)
+              btn.textContent = 'Start Ride';
+              btn.style.backgroundColor = '#ec4899'; // Pink/Different color
+              btn.disabled = false;
+              btn.onclick = () => startRide(rideId);
+              btn.className = 'accept-btn start-btn';
+
+              // Create Cancel Button
+              const cancelBtn = document.createElement('button');
+              cancelBtn.textContent = 'Cancel Ride';
+              cancelBtn.className = 'accept-btn cancel-btn'; // Re-use basic styles
+              cancelBtn.style.backgroundColor = '#ef4444'; // Red
+              cancelBtn.style.marginTop = '0.5rem';
+              cancelBtn.onclick = () => cancelRide(rideId);
+
+              container.appendChild(cancelBtn);
             }
           } else {
             alert('Error: ' + (data.message || 'Failed to accept ride'));
             if (btn) {
               btn.textContent = 'Accept Ride';
               btn.disabled = false;
+            }
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Request failed');
+        }
+      }
+
+      // Function to start ride via API
+      async function startRide(rideId) {
+        const token = tokenInput.value.trim();
+        if (!token) return alert('Token missing');
+
+        try {
+          const btn =
+            document.querySelector(`#ride-${rideId} .start-btn`) ||
+            document.querySelector(`#ride-${rideId} .accept-btn`);
+          const cancelBtn = document.querySelector(
+            `#ride-${rideId} .cancel-btn`,
+          );
+
+          if (btn) {
+            btn.textContent = 'Starting...';
+            btn.disabled = true;
+          }
+          if (cancelBtn) {
+            cancelBtn.disabled = true;
+          }
+
+          const response = await fetch(
+            `http://localhost:9000/api/v1/ride/start-ride/${rideId}`,
+            {
+              method: 'PATCH', // Updated to PATCH
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            },
+          );
+
+          const data = await response.json();
+
+          if (response.ok) {
+            alert('Success: ' + data.message);
+            if (btn) {
+              // Transition to Complete Ride button
+              btn.textContent = 'Complete Ride';
+              btn.style.backgroundColor = '#3b82f6'; // Blue
+              btn.disabled = false;
+              btn.onclick = () => completeRide(rideId);
+              btn.className = 'accept-btn complete-btn';
+            }
+            if (cancelBtn) {
+              cancelBtn.remove(); // Remove cancel button after start
+            }
+          } else {
+            alert('Error: ' + (data.message || 'Failed to start ride'));
+            if (btn) {
+              btn.textContent = 'Start Ride';
+              btn.disabled = false;
+            }
+            if (cancelBtn) {
+              cancelBtn.disabled = false;
+            }
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Request failed');
+        }
+      }
+
+      // Function to complete ride via API
+      async function completeRide(rideId) {
+        const token = tokenInput.value.trim();
+        if (!token) return alert('Token missing');
+
+        // Confirm completion
+        if (!confirm('Are you sure you want to complete this ride?')) return;
+
+        try {
+          const btn = document.querySelector(`#ride-${rideId} .complete-btn`);
+          if (btn) {
+            btn.textContent = 'Completing...';
+            btn.disabled = true;
+          }
+
+          const response = await fetch(
+            `http://localhost:9000/api/v1/ride/complete-ride/${rideId}`,
+            {
+              method: 'PATCH',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            },
+          );
+
+          const data = await response.json();
+
+          if (response.ok) {
+            alert('Success: ' + data.message);
+            if (btn) {
+              btn.textContent = 'Ride Completed ✅';
+              btn.style.backgroundColor = '#10b981'; // Green
+              btn.disabled = true;
+              btn.onclick = null;
+            }
+          } else {
+            alert('Error: ' + (data.message || 'Failed to complete ride'));
+            if (btn) {
+              btn.textContent = 'Complete Ride';
+              btn.disabled = false;
+            }
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Request failed');
+        }
+      }
+
+      // Function to cancel ride via API
+      async function cancelRide(rideId) {
+        const token = tokenInput.value.trim();
+        if (!token) return alert('Token missing');
+
+        // Confirm cancellation
+        if (!confirm('Are you sure you want to cancel this ride?')) return;
+
+        try {
+          const cancelBtn = document.querySelector(
+            `#ride-${rideId} .cancel-btn`,
+          );
+          const startBtn = document.querySelector(`#ride-${rideId} .start-btn`);
+
+          if (cancelBtn) {
+            cancelBtn.textContent = 'Canceling...';
+            cancelBtn.disabled = true;
+          }
+          if (startBtn) {
+            startBtn.disabled = true;
+          }
+
+          const response = await fetch(
+            `http://localhost:9000/api/v1/ride/cancel-ride/${rideId}`,
+            {
+              method: 'PATCH',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            },
+          );
+
+          const data = await response.json();
+
+          if (response.ok) {
+            alert('Success: ' + data.message);
+            const container = document.getElementById(`ride-${rideId}`);
+            if (container) {
+              // Update UI to show cancelled state
+              container.style.opacity = '0.5';
+              container.innerHTML +=
+                '<p style="color: #ef4444; font-weight: bold; text-align: center;">🚫 RIDE CANCELED</p>';
+
+              // Disable/Remove buttons
+              if (cancelBtn) cancelBtn.remove();
+              if (startBtn) startBtn.remove();
+            }
+          } else {
+            alert('Error: ' + (data.message || 'Failed to cancel ride'));
+            if (cancelBtn) {
+              cancelBtn.textContent = 'Cancel Ride';
+              cancelBtn.disabled = false;
+            }
+            if (startBtn) {
+              startBtn.disabled = false;
             }
           }
         } catch (err) {
