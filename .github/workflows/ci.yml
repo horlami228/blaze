@@ -22,16 +22,26 @@ jobs:
           --health-interval=5s
           --health-timeout=5s
           --health-retries=5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
     env:
       DATABASE_URL: ${{secrets.DATABASE_URL}}
       DIRECT_URL: ${{secrets.DIRECT_URL}}
       JWT_SECRET: ${{secrets.JWT_SECRET}}
       GOOGLE_CLIENT_ID: ${{secrets.GOOGLE_CLIENT_ID}}
-      LOG_LEVEL: debug
+      LOG_LEVEL: info
       BETTERSTACK_ENABLED: false
       CLOUD_FLARE_R2_ACCESS_KEY_ID: ${{secrets.CLOUD_FLARE_R2_ACCESS_KEY_ID}}
       CLOUD_FLARE_R2_SECRET_ACCESS_KEY: ${{secrets.CLOUD_FLARE_R2_SECRET_ACCESS_KEY}}
       CLOUD_FLARE_R2_ACCOUNT_ID: ${{secrets.CLOUD_FLARE_R2_ACCOUNT_ID}}
+      REDIS_URL: redis://redis:6379
 
     steps:
       - name: Checkout code
