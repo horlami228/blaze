@@ -21,6 +21,8 @@ import { LoggerModule } from 'nestjs-pino';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { CloudflareR2Module } from './common/cloudflare/cloudflare-r2.module';
+import { RideModule } from './ride/ride.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -39,6 +41,7 @@ import { CloudflareR2Module } from './common/cloudflare/cloudflare-r2.module';
         CLOUD_FLARE_R2_ACCOUNT_ID: Joi.string().required(),
         CLOUD_FLARE_R2_ACCESS_KEY_ID: Joi.string().required(),
         CLOUD_FLARE_R2_SECRET_ACCESS_KEY: Joi.string().required(),
+        REDIS_URL: Joi.string().required(),
       }),
     }),
     LoggerModule.forRootAsync({
@@ -46,23 +49,25 @@ import { CloudflareR2Module } from './common/cloudflare/cloudflare-r2.module';
       useFactory: (configService: ConfigService) =>
         loggerConfigFactory(configService),
     }),
-    ThrottlerModule.forRoot([
-      {
-        name: 'short',
-        ttl: 1000,
-        limit: 10,
-      },
-      {
-        name: 'medium',
-        ttl: 60000,
-        limit: 100,
-      },
-      {
-        name: 'long',
-        ttl: 600000,
-        limit: 1000,
-      },
-    ]),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          name: 'short',
+          ttl: 1000,
+          limit: 10,
+        },
+        {
+          name: 'medium',
+          ttl: 60000,
+          limit: 100,
+        },
+        {
+          name: 'long',
+          ttl: 600000,
+          limit: 1000,
+        },
+      ],
+    }),
 
     PrismaModule,
 
@@ -73,6 +78,10 @@ import { CloudflareR2Module } from './common/cloudflare/cloudflare-r2.module';
     DriverModule,
 
     CloudflareR2Module.forRoot(),
+
+    RideModule,
+
+    RedisModule,
   ],
   controllers: [AppController, RiderController],
   providers: [

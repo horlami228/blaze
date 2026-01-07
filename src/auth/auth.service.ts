@@ -22,7 +22,9 @@ export class AuthService {
     private googleStrategy: GoogleStrategy,
     private driverService: DriverService,
     private readonly logger: PinoLogger,
-  ) {}
+  ) {
+    this.logger.setContext(AuthService.name);
+  }
 
   async registerRider(data: CreateRiderUserDto) {
     return this.processRegistration(data, 'RIDER', async (user) => {

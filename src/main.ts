@@ -6,6 +6,8 @@ import { Logger } from 'nestjs-pino';
 import { ZodValidationPipe } from 'nestjs-zod';
 
 import helmet from 'helmet';
+import { RedisService } from './redis/redis.service';
+import { RedisIoAdapter } from './auth/websocket/redis-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -28,6 +30,16 @@ async function bootstrap() {
       crossOriginResourcePolicy: process.env.NODE_ENV === 'production',
     }),
   );
+
+  // WebSocket setup for redis pub/sub
+  const redisService = app.get(RedisService);
+  const redisIoAdapter = new RedisIoAdapter(app, redisService);
+  await redisIoAdapter.connectToRedis();
+
+  // Use adapter for all websocket gateway
+  app.useWebSocketAdapter(redisIoAdapter);
+
+  // app.setGlobalPrefix('api/v1');
 
   // app.useGlobalPipes(
   //   new ValidationPipe({
