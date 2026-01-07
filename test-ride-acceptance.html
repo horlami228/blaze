@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ride Acceptance Tester</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+      body {
+        font-family:
+          'Inter',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        background-color: #0f172a;
+        color: #f8fafc;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        margin: 0;
+      }
+
+      .container {
+        background: rgba(30, 41, 59, 0.7);
+        backdrop-filter: blur(10px);
+        padding: 2rem;
+        border-radius: 1rem;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        width: 400px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      h1 {
+        font-size: 1.5rem;
+        margin-bottom: 1.5rem;
+        text-align: center;
+        color: #38bdf8;
+      }
+
+      .input-group {
+        margin-bottom: 1rem;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+        color: #94a3b8;
+      }
+
+      input {
+        width: 100%;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        border: 1px solid #334155;
+        background: #1e293b;
+        color: white;
+        box-sizing: border-box;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+
+      input:focus {
+        border-color: #38bdf8;
+      }
+
+      button {
+        width: 100%;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        border: none;
+        background: #38bdf8;
+        color: #0f172a;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      button:hover {
+        background: #0ea5e9;
+      }
+
+      .status {
+        margin-top: 1rem;
+        text-align: center;
+        font-size: 0.875rem;
+      }
+
+      .status.connected {
+        color: #10b981;
+      }
+      .status.disconnected {
+        color: #ef4444;
+      }
+
+      #rides-log {
+        margin-top: 1.5rem;
+        max-height: 400px;
+        overflow-y: auto;
+        font-size: 0.875rem;
+        border-top: 1px solid #334155;
+        padding-top: 1rem;
+      }
+
+      .ride-item {
+        padding: 1rem;
+        background: #1e293b;
+        border-radius: 0.5rem;
+        margin-bottom: 0.5rem;
+        border: 1px solid #334155;
+        animation: fadeIn 0.3s ease-out;
+      }
+
+      .ride-item h3 {
+        margin: 0 0 0.5rem 0;
+        color: #fbbf24;
+      }
+
+      .ride-item p {
+        margin: 0.25rem 0;
+        color: #cbd5e1;
+      }
+
+      .accept-btn {
+        margin-top: 0.5rem;
+        background: #22c55e;
+        color: white;
+      }
+
+      .accept-btn:hover {
+        background: #16a34a;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Ride Driver Tester</h1>
+
+      <div class="input-group">
+        <label for="token">Driver Auth Token</label>
+        <input
+          type="text"
+          id="token"
+          placeholder="Paste your Driver JWT here"
+        />
+      </div>
+
+      <button id="connect-btn">Connect as Driver</button>
+      <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; width: 100%">
+        <button
+          id="simulate-btn"
+          onclick="toggleSimulation()"
+          disabled
+          style="background-color: #64748b; flex: 1"
+        >
+          Start Driving Simulation
+        </button>
+        <button
+          id="availability-btn"
+          onclick="toggleAvailability()"
+          disabled
+          style="background-color: #64748b; flex: 1"
+        >
+          Go Online
+        </button>
+      </div>
+
+      <div id="status" class="status disconnected">Disconnected</div>
+
+      <div id="rides-log">
+        <!-- New rides will appear here -->
+      </div>
+    </div>
+
+    <script>
+      let socket;
+      const tokenInput = document.getElementById('token');
+      const connectBtn = document.getElementById('connect-btn');
+      const statusDiv = document.getElementById('status');
+      const logDiv = document.getElementById('rides-log');
+
+      connectBtn.onclick = () => {
+        const token = tokenInput.value.trim();
+        if (!token) {
+          alert('Please enter a driver token');
+          return;
+        }
+
+        if (socket) socket.disconnect();
+
+        // Connect to the /rides namespace
+        socket = io('http://localhost:9000/rides', {
+          auth: { token },
+          transports: ['websocket'],
+        });
+
+        socket.on('connect', async () => {
+          statusDiv.textContent = 'Connected (Waiting for rides...)';
+          statusDiv.className = 'status connected';
+          console.log('Connected to websocket');
+
+          // Enable simulation button
+          const simBtn = document.getElementById('simulate-btn');
+          if (simBtn) simBtn.disabled = false;
+
+          const availBtn = document.getElementById('availability-btn');
+          if (availBtn) {
+            availBtn.disabled = true; // Disable until we know status
+            try {
+              const response = await fetch(
+                'http://localhost:9000/api/v1/driver/profile',
+                {
+                  headers: { Authorization: `Bearer ${token}` },
+                },
+              );
+              const resData = await response.json();
+              if (response.ok) {
+                const isOnline = resData.data.driver.isOnline;
+                if (isOnline) {
+                  availBtn.textContent = 'Go Offline';
+                  availBtn.style.backgroundColor = '#ef4444'; // Red
+                } else {
+                  availBtn.textContent = 'Go Online';
+                  availBtn.style.backgroundColor = '#22c55e'; // Green
+                }
+                availBtn.disabled = false;
+              }
+            } catch (e) {
+              console.error('Failed to fetch profile', e);
+              availBtn.disabled = false;
+              // Default to Go Online if fail
+              availBtn.textContent = 'Go Online';
+              availBtn.style.backgroundColor = '#22c55e';
+            }
+          }
+        });
+
+        socket.on('disconnect', () => {
+          statusDiv.textContent = 'Disconnected';
+          statusDiv.className = 'status disconnected';
+
+          const simBtn = document.getElementById('simulate-btn');
+          if (simBtn) simBtn.disabled = true;
+          if (simulationInterval) clearInterval(simulationInterval);
+        });
+
+        socket.on('connect_error', (err) => {
+          statusDiv.textContent = 'Connection Error: ' + err.message;
+          statusDiv.className = 'status disconnected';
+          console.error('Socket error:', err);
+        });
+
+        // Listen for new-ride event
+        socket.on('new-ride', (ride) => {
+          console.log('New Ride Received:', ride);
+
+          const item = document.createElement('div');
+          item.className = 'ride-item';
+          item.id = `ride-${ride.id}`;
+
+          item.innerHTML = `
+            <h3>🚖 New Ride Request!</h3>
+            <p><strong>Pickup:</strong> ${ride.pickupAddress}</p>
+            <p><strong>Dropoff:</strong> ${ride.dropoffAddress}</p>
+            <p><strong>Fare:</strong> ₦${ride.fare.toLocaleString()}</p>
+            <p><strong>Distance:</strong> ${ride.distance}km</p>
+            <button class="accept-btn" onclick="acceptRide('${ride.id}')">Accept Ride</button>
+          `;
+
+          logDiv.prepend(item);
+
+          // Native Browser Notification
+          if (Notification.permission === 'granted') {
+            new Notification('New Ride Request', {
+              body: `Pickup: ${ride.pickupAddress}\nFare: ₦${ride.fare}`,
+            });
+          }
+        });
+      };
+
+      let simulationInterval;
+
+      async function toggleAvailability() {
+        const token = tokenInput.value.trim();
+        if (!token) return alert('Token missing');
+
+        try {
+          const btn = document.getElementById('availability-btn');
+          btn.disabled = true;
+
+          const response = await fetch(
+            'http://localhost:9000/api/v1/ride/toggle-availability',
+            {
+              method: 'PATCH',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            },
+          );
+
+          const data = await response.json();
+
+          if (response.ok) {
+            // Determine new state based on response or toggle logic
+            // The API returns { data: { isOnline: boolean } }
+            const isOnline = data.data.isOnline;
+
+            if (isOnline) {
+              btn.textContent = 'Go Offline';
+              btn.style.backgroundColor = '#ef4444'; // Red
+            } else {
+              btn.textContent = 'Go Online';
+              btn.style.backgroundColor = '#22c55e'; // Green
+            }
+            alert('Success: ' + data.message);
+          } else {
+            alert('Error: ' + data.message);
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Request failed');
+        } finally {
+          document.getElementById('availability-btn').disabled = false;
+        }
+      }
+
+      // Simulate Driving Logic
+      function toggleSimulation() {
+        if (!socket || !socket.connected) return alert('Connect first!');
+
+        if (simulationInterval) {
+          clearInterval(simulationInterval);
+          simulationInterval = null;
+          document.getElementById('simulate-btn').textContent =
+            'Start Driving Simulation';
+          document.getElementById('simulate-btn').style.backgroundColor =
+            '#38bdf8';
+          console.log('Simulation stopped');
+        } else {
+          document.getElementById('simulate-btn').textContent =
+            'Stop Simulation';
+          document.getElementById('simulate-btn').style.backgroundColor =
+            '#ef4444';
+
+          let lat = 6.5244; // Example Lagos Lat
+          let lng = 3.3792; // Example Lagos Lng
+
+          simulationInterval = setInterval(() => {
+            // Simulate small movement
+            lat += 0.0001;
+            lng += 0.0001;
+
+            const payload = {
+              latitude: lat,
+              longitude: lng,
+            };
+
+            console.log('Emitting location:', payload);
+            socket.emit('update-location', payload);
+          }, 3000); // Every 3 seconds
+        }
+      }
+
+      // Function to accept ride via API
+      async function acceptRide(rideId) {
+        const token = tokenInput.value.trim();
+        if (!token) return alert('Token missing');
+
+        try {
+          const btn = document.querySelector(`#ride-${rideId} .accept-btn`);
+          if (btn) {
+            btn.textContent = 'Accepting...';
+            btn.disabled = true;
+          }
+
+          const response = await fetch(
+            `http://localhost:9000/api/v1/ride/accept-ride/${rideId}`,
+            {
+              method: 'PATCH', // Updated to PATCH
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            },
+          );
+
+          const data = await response.json();
+
+          if (response.ok) {
+            alert('Success: ' + data.message);
+            if (btn) {
+              const container = btn.parentElement;
+
+              // Create Start Button (repurposing existing button)
+              btn.textContent = 'Start Ride';
+              btn.style.backgroundColor = '#ec4899'; // Pink/Different color
+              btn.disabled = false;
+              btn.onclick = () => startRide(rideId);
+              btn.className = 'accept-btn start-btn';
+
+              // Create Cancel Button
+              const cancelBtn = document.createElement('button');
+              cancelBtn.textContent = 'Cancel Ride';
+              cancelBtn.className = 'accept-btn cancel-btn'; // Re-use basic styles
+              cancelBtn.style.backgroundColor = '#ef4444'; // Red
+              cancelBtn.style.marginTop = '0.5rem';
+              cancelBtn.onclick = () => cancelRide(rideId);
+
+              container.appendChild(cancelBtn);
+            }
+          } else {
+            alert('Error: ' + (data.message || 'Failed to accept ride'));
+            if (btn) {
+              btn.textContent = 'Accept Ride';
+              btn.disabled = false;
+            }
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Request failed');
+        }
+      }
+
+      // Function to start ride via API
+      async function startRide(rideId) {
+        const token = tokenInput.value.trim();
+        if (!token) return alert('Token missing');
+
+        try {
+          const btn =
+            document.querySelector(`#ride-${rideId} .start-btn`) ||
+            document.querySelector(`#ride-${rideId} .accept-btn`);
+          const cancelBtn = document.querySelector(
+            `#ride-${rideId} .cancel-btn`,
+          );
+
+          if (btn) {
+            btn.textContent = 'Starting...';
+            btn.disabled = true;
+          }
+          if (cancelBtn) {
+            cancelBtn.disabled = true;
+          }
+
+          const response = await fetch(
+            `http://localhost:9000/api/v1/ride/start-ride/${rideId}`,
+            {
+              method: 'PATCH', // Updated to PATCH
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            },
+          );
+
+          const data = await response.json();
+
+          if (response.ok) {
+            alert('Success: ' + data.message);
+            if (btn) {
+              // Transition to Complete Ride button
+              btn.textContent = 'Complete Ride';
+              btn.style.backgroundColor = '#3b82f6'; // Blue
+              btn.disabled = false;
+              btn.onclick = () => completeRide(rideId);
+              btn.className = 'accept-btn complete-btn';
+            }
+            if (cancelBtn) {
+              cancelBtn.remove(); // Remove cancel button after start
+            }
+          } else {
+            alert('Error: ' + (data.message || 'Failed to start ride'));
+            if (btn) {
+              btn.textContent = 'Start Ride';
+              btn.disabled = false;
+            }
+            if (cancelBtn) {
+              cancelBtn.disabled = false;
+            }
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Request failed');
+        }
+      }
+
+      // Function to complete ride via API
+      async function completeRide(rideId) {
+        const token = tokenInput.value.trim();
+        if (!token) return alert('Token missing');
+
+        // Confirm completion
+        if (!confirm('Are you sure you want to complete this ride?')) return;
+
+        try {
+          const btn = document.querySelector(`#ride-${rideId} .complete-btn`);
+          if (btn) {
+            btn.textContent = 'Completing...';
+            btn.disabled = true;
+          }
+
+          const response = await fetch(
+            `http://localhost:9000/api/v1/ride/complete-ride/${rideId}`,
+            {
+              method: 'PATCH',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            },
+          );
+
+          const data = await response.json();
+
+          if (response.ok) {
+            alert('Success: ' + data.message);
+            if (btn) {
+              btn.textContent = 'Ride Completed ✅';
+              btn.style.backgroundColor = '#10b981'; // Green
+              btn.disabled = true;
+              btn.onclick = null;
+            }
+          } else {
+            alert('Error: ' + (data.message || 'Failed to complete ride'));
+            if (btn) {
+              btn.textContent = 'Complete Ride';
+              btn.disabled = false;
+            }
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Request failed');
+        }
+      }
+
+      // Function to cancel ride via API
+      async function cancelRide(rideId) {
+        const token = tokenInput.value.trim();
+        if (!token) return alert('Token missing');
+
+        // Confirm cancellation
+        if (!confirm('Are you sure you want to cancel this ride?')) return;
+
+        try {
+          const cancelBtn = document.querySelector(
+            `#ride-${rideId} .cancel-btn`,
+          );
+          const startBtn = document.querySelector(`#ride-${rideId} .start-btn`);
+
+          if (cancelBtn) {
+            cancelBtn.textContent = 'Canceling...';
+            cancelBtn.disabled = true;
+          }
+          if (startBtn) {
+            startBtn.disabled = true;
+          }
+
+          const response = await fetch(
+            `http://localhost:9000/api/v1/ride/cancel-ride/${rideId}`,
+            {
+              method: 'PATCH',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            },
+          );
+
+          const data = await response.json();
+
+          if (response.ok) {
+            alert('Success: ' + data.message);
+            const container = document.getElementById(`ride-${rideId}`);
+            if (container) {
+              // Update UI to show cancelled state
+              container.style.opacity = '0.5';
+              container.innerHTML +=
+                '<p style="color: #ef4444; font-weight: bold; text-align: center;">🚫 RIDE CANCELED</p>';
+
+              // Disable/Remove buttons
+              if (cancelBtn) cancelBtn.remove();
+              if (startBtn) startBtn.remove();
+            }
+          } else {
+            alert('Error: ' + (data.message || 'Failed to cancel ride'));
+            if (cancelBtn) {
+              cancelBtn.textContent = 'Cancel Ride';
+              cancelBtn.disabled = false;
+            }
+            if (startBtn) {
+              startBtn.disabled = false;
+            }
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Request failed');
+        }
+      }
+
+      // Request notification permission
+      if (Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
+    </script>
+  </body>
+</html>
