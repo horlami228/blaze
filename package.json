@@ -18,6 +18,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e:watch": "jest --config ./test/jest-e2e.json --runInBand --watch",
+    "pretest:e2e:watch": "yarn pretest:e2e",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
     "pretest:e2e": "NODE_ENV=test prisma db push --accept-data-loss",
     "prisma:generate": "prisma generate",

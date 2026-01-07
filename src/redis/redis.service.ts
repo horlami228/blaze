@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   public client: Redis;
+  private readonly clients: Redis[] = [];
 
   constructor(
     private readonly configService: ConfigService,
@@ -21,6 +22,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         return Math.min(times * 50, 2000);
       },
     });
+    this.client.on('error', (err) => {
+      this.logger.error({ err }, 'Redis main client error');
+    });
+    this.clients.push(this.client);
   }
 
   async onModuleInit() {
@@ -34,9 +39,19 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     this.logger.debug('===================================');
 
     try {
-      await this.client.connect();
-      this.logger.info('Redis connected successfully');
+      if (this.client.status === 'wait' || this.client.status === 'end') {
+        await this.client.connect();
+        this.logger.info('Redis connected successfully');
+      } else {
+        this.logger.debug(
+          `Redis already in status: ${this.client.status}, skipping explicit connect`,
+        );
+      }
     } catch (error) {
+      if (error.message.includes('already connected')) {
+        this.logger.debug('Redis already connected, ignoring');
+        return;
+      }
       this.logger.error({ error }, 'Redis connection error');
       throw new Error(`Redis connection failed: ${error.message}`);
     }
@@ -44,10 +59,43 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   // creates a twin of the client for the WebSocket Adapter to use
   getSubscriberClient(): Redis {
-    return this.client.duplicate();
+    const dupe = this.client.duplicate();
+    dupe.on('error', (err) => {
+      this.logger.error({ err }, 'Redis subscriber client error');
+    });
+    this.clients.push(dupe);
+    return dupe;
   }
 
-  onModuleDestroy() {
-    this.client.quit();
+  async onModuleDestroy() {
+    this.logger.debug(
+      `Closing ${this.clients.length} Redis clients in onModuleDestroy`,
+    );
+    await Promise.all(
+      this.clients.map(async (client) => {
+        try {
+          // If already disconnected or ended, do nothing
+          if (client.status === 'end' || client.status === 'wait') {
+            return;
+          }
+          // Attempt graceful shutdown
+          await client.quit();
+        } catch (err) {
+          // Silence "Connection is closed" and other shutdown-related errors
+          if (!err.message.includes('Connection is closed')) {
+            this.logger.debug(
+              { err },
+              'Incidental error during redis shutdown',
+            );
+          }
+          // Fallback to immediate disconnect
+          try {
+            client.disconnect();
+          } catch (e) {
+            // fully give up
+          }
+        }
+      }),
+    );
   }
 }

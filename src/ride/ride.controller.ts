@@ -50,7 +50,7 @@ export class RideController {
     return await this.rideService.updateDriverLocation(userId, dto);
   }
 
-  @Post('toggle-availability')
+  @Patch('toggle-availability')
   @ApiOperation({ summary: 'Toggle driver availability' })
   @ApiResponse({
     status: 201,

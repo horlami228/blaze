@@ -163,6 +163,24 @@
       </div>
 
       <button id="connect-btn">Connect as Driver</button>
+      <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; width: 100%">
+        <button
+          id="simulate-btn"
+          onclick="toggleSimulation()"
+          disabled
+          style="background-color: #64748b; flex: 1"
+        >
+          Start Driving Simulation
+        </button>
+        <button
+          id="availability-btn"
+          onclick="toggleAvailability()"
+          disabled
+          style="background-color: #64748b; flex: 1"
+        >
+          Go Online
+        </button>
+      </div>
 
       <div id="status" class="status disconnected">Disconnected</div>
 
@@ -193,15 +211,54 @@
           transports: ['websocket'],
         });
 
-        socket.on('connect', () => {
+        socket.on('connect', async () => {
           statusDiv.textContent = 'Connected (Waiting for rides...)';
           statusDiv.className = 'status connected';
           console.log('Connected to websocket');
+
+          // Enable simulation button
+          const simBtn = document.getElementById('simulate-btn');
+          if (simBtn) simBtn.disabled = false;
+
+          const availBtn = document.getElementById('availability-btn');
+          if (availBtn) {
+            availBtn.disabled = true; // Disable until we know status
+            try {
+              const response = await fetch(
+                'http://localhost:9000/api/v1/driver/profile',
+                {
+                  headers: { Authorization: `Bearer ${token}` },
+                },
+              );
+              const resData = await response.json();
+              if (response.ok) {
+                const isOnline = resData.data.driver.isOnline;
+                if (isOnline) {
+                  availBtn.textContent = 'Go Offline';
+                  availBtn.style.backgroundColor = '#ef4444'; // Red
+                } else {
+                  availBtn.textContent = 'Go Online';
+                  availBtn.style.backgroundColor = '#22c55e'; // Green
+                }
+                availBtn.disabled = false;
+              }
+            } catch (e) {
+              console.error('Failed to fetch profile', e);
+              availBtn.disabled = false;
+              // Default to Go Online if fail
+              availBtn.textContent = 'Go Online';
+              availBtn.style.backgroundColor = '#22c55e';
+            }
+          }
         });
 
         socket.on('disconnect', () => {
           statusDiv.textContent = 'Disconnected';
           statusDiv.className = 'status disconnected';
+
+          const simBtn = document.getElementById('simulate-btn');
+          if (simBtn) simBtn.disabled = true;
+          if (simulationInterval) clearInterval(simulationInterval);
         });
 
         socket.on('connect_error', (err) => {
@@ -237,6 +294,90 @@
           }
         });
       };
+
+      let simulationInterval;
+
+      async function toggleAvailability() {
+        const token = tokenInput.value.trim();
+        if (!token) return alert('Token missing');
+
+        try {
+          const btn = document.getElementById('availability-btn');
+          btn.disabled = true;
+
+          const response = await fetch(
+            'http://localhost:9000/api/v1/ride/toggle-availability',
+            {
+              method: 'PATCH',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            },
+          );
+
+          const data = await response.json();
+
+          if (response.ok) {
+            // Determine new state based on response or toggle logic
+            // The API returns { data: { isOnline: boolean } }
+            const isOnline = data.data.isOnline;
+
+            if (isOnline) {
+              btn.textContent = 'Go Offline';
+              btn.style.backgroundColor = '#ef4444'; // Red
+            } else {
+              btn.textContent = 'Go Online';
+              btn.style.backgroundColor = '#22c55e'; // Green
+            }
+            alert('Success: ' + data.message);
+          } else {
+            alert('Error: ' + data.message);
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Request failed');
+        } finally {
+          document.getElementById('availability-btn').disabled = false;
+        }
+      }
+
+      // Simulate Driving Logic
+      function toggleSimulation() {
+        if (!socket || !socket.connected) return alert('Connect first!');
+
+        if (simulationInterval) {
+          clearInterval(simulationInterval);
+          simulationInterval = null;
+          document.getElementById('simulate-btn').textContent =
+            'Start Driving Simulation';
+          document.getElementById('simulate-btn').style.backgroundColor =
+            '#38bdf8';
+          console.log('Simulation stopped');
+        } else {
+          document.getElementById('simulate-btn').textContent =
+            'Stop Simulation';
+          document.getElementById('simulate-btn').style.backgroundColor =
+            '#ef4444';
+
+          let lat = 6.5244; // Example Lagos Lat
+          let lng = 3.3792; // Example Lagos Lng
+
+          simulationInterval = setInterval(() => {
+            // Simulate small movement
+            lat += 0.0001;
+            lng += 0.0001;
+
+            const payload = {
+              latitude: lat,
+              longitude: lng,
+            };
+
+            console.log('Emitting location:', payload);
+            socket.emit('update-location', payload);
+          }, 3000); // Every 3 seconds
+        }
+      }
 
       // Function to accept ride via API
       async function acceptRide(rideId) {

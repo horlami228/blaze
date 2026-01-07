@@ -3,6 +3,8 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { PinoLogger } from 'nestjs-pino';
@@ -22,6 +24,7 @@ export class RideService {
     private readonly prisma: PrismaService,
     private readonly logger: PinoLogger,
     private readonly redis: RedisService,
+    @Inject(forwardRef(() => RidesGateway))
     private readonly rideGateway: RidesGateway,
   ) {
     this.logger.setContext(RideService.name);
@@ -520,6 +523,7 @@ export class RideService {
   }
 
   // complete a ride
+  //TODO: remove the pathkey from the redis
   async completeRide(userId: string, rideId: string) {
     const driver = await this.prisma.driver.findFirst({
       where: { userId, deletedAt: null },

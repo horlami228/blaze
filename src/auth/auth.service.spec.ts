@@ -29,6 +29,7 @@ describe('AuthService', () => {
 
   // Mock PinoLogger with all methods used by the service
   const mockLogger = {
+    setContext: jest.fn(),
     info: jest.fn(),
     warn: jest.fn(),
     debug: jest.fn(),
