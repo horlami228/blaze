@@ -49,23 +49,25 @@ import { RedisModule } from './redis/redis.module';
       useFactory: (configService: ConfigService) =>
         loggerConfigFactory(configService),
     }),
-    ThrottlerModule.forRoot([
-      {
-        name: 'short',
-        ttl: 1000,
-        limit: 10,
-      },
-      {
-        name: 'medium',
-        ttl: 60000,
-        limit: 100,
-      },
-      {
-        name: 'long',
-        ttl: 600000,
-        limit: 1000,
-      },
-    ]),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          name: 'short',
+          ttl: 1000,
+          limit: 10,
+        },
+        {
+          name: 'medium',
+          ttl: 60000,
+          limit: 100,
+        },
+        {
+          name: 'long',
+          ttl: 600000,
+          limit: 1000,
+        },
+      ],
+    }),
 
     PrismaModule,
 

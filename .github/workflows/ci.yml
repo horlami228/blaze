@@ -41,7 +41,7 @@ jobs:
       CLOUD_FLARE_R2_ACCESS_KEY_ID: ${{secrets.CLOUD_FLARE_R2_ACCESS_KEY_ID}}
       CLOUD_FLARE_R2_SECRET_ACCESS_KEY: ${{secrets.CLOUD_FLARE_R2_SECRET_ACCESS_KEY}}
       CLOUD_FLARE_R2_ACCOUNT_ID: ${{secrets.CLOUD_FLARE_R2_ACCOUNT_ID}}
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://localhost:6379
 
     steps:
       - name: Checkout code
