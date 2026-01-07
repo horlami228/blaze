@@ -7,6 +7,7 @@ import { Gender, VehicleColor, VehicleType } from '@prisma/client';
 import { join } from 'path';
 import { writeFileSync, unlinkSync } from 'fs';
 import { ZodValidationPipe } from 'nestjs-zod';
+import { CloudflareR2Service } from '../src/common/cloudflare/cloudflare-r2.service';
 
 describe('Driver (e2e)', () => {
   let app: INestApplication;
@@ -22,7 +23,15 @@ describe('Driver (e2e)', () => {
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(CloudflareR2Service)
+      .useValue({
+        uploadFile: jest.fn().mockResolvedValue('mock-key'),
+        getPresignedDownloadUrl: jest
+          .fn()
+          .mockResolvedValue('http://mock-url.com'),
+      })
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(new ZodValidationPipe());
@@ -57,9 +66,13 @@ describe('Driver (e2e)', () => {
 
   afterAll(async () => {
     // Cleanup relevant tables
-    await prisma.$executeRawUnsafe(
-      `TRUNCATE TABLE "User", "Driver", "Vehicle", "VehicleModel", "VehicleManufacturer" CASCADE`,
-    );
+    try {
+      await prisma.$executeRawUnsafe(
+        `TRUNCATE TABLE "User", "Driver", "Vehicle", "VehicleModel", "VehicleManufacturer" CASCADE`,
+      );
+    } catch (e) {
+      console.error('Error during driver.e2e-spec.ts cleanup:', e.message);
+    }
     await app.close();
     unlinkSync(testFile);
   });

@@ -1,9 +1,11 @@
 import { seedVehicles } from './vehicle-seed';
+import { seedDrivers } from './driver-seed';
 
 async function main() {
   console.log('🌱 Seeding database...');
 
-  await seedVehicles();
+  // await seedVehicles();
+  await seedDrivers();
 
   console.log('✅ Seeding completed');
 }

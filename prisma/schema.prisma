@@ -91,7 +91,12 @@ model Driver {
     // Onboarding tracking
   onboardingCompleted Boolean   @default(false)
   onboardingStep      Int       @default(0)  // 0=not started, 1=personal info done, 2=driver done 3=vehicle done
-  
+  lastKnownLatitude   Decimal? @db.Decimal(10, 8)
+  lastKnownLongitude  Decimal? @db.Decimal(11, 8)
+  lastLocationUpdate  DateTime? 
+  lastHeading         Decimal? @db.Decimal(5, 2)
+  lastSpeed           Decimal? @db.Decimal(5, 2)
+  isOnline            Boolean   @default(false)
   rides           Ride[]
   ratingsReceived Rating[]  @relation("RatedDriver")
   createdAt       DateTime  @default(now())
@@ -152,20 +157,23 @@ model Ride {
   vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
 
   // Pickup location
-  pickupLatitude  Float
-  pickupLongitude Float
+  pickupLatitude  Decimal? @db.Decimal(10, 8)
+  pickupLongitude Decimal? @db.Decimal(11, 8)
   pickupAddress   String
 
   // Dropoff location
-  dropoffLatitude  Float
-  dropoffLongitude Float
+  dropoffLatitude  Decimal? @db.Decimal(10, 8)
+  dropoffLongitude Decimal? @db.Decimal(11, 8)
   dropoffAddress   String
 
   startDateTime DateTime
   endDateTime   DateTime?
   status        RideStatus @default(PENDING)
+  // TODO: check proper type
   fare          Float?
-  distance      Float? // in kilometers
+  distance      Decimal? @db.Decimal(10, 2) // in kilometers
+
+  path_json Json @default("[]")
 
   ratings   Rating[]
   createdAt DateTime @default(now())
@@ -178,8 +186,8 @@ model Ride {
 model Location {
   id        String   @id @default(uuid())
   name      String
-  latitude  Float
-  longitude Float
+  latitude  Decimal? @db.Decimal(10, 8)
+  longitude Decimal? @db.Decimal(11, 8)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

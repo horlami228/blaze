@@ -19,7 +19,9 @@ export class DriverService {
     private prisma: PrismaService,
     private readonly logger: PinoLogger,
     private readonly r2Service: CloudflareR2Service,
-  ) {}
+  ) {
+    this.logger.setContext(DriverService.name);
+  }
 
   async createDriver(userId: string): Promise<Driver> {
     this.logger.info({ userId }, 'Creating new driver profile');

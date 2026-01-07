@@ -11,7 +11,7 @@ import { Logger } from 'nestjs-pino';
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   constructor(private readonly logger: Logger) {}
-
+  //TODO: add prisma exception handling
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
