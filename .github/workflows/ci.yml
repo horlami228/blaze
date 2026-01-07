@@ -64,6 +64,17 @@ jobs:
       - name: Generate Prisma code
         run: yarn prisma:generate
 
+      - name: Wait for Redis
+        run: |
+          for i in {1..20}; do
+            if redis-cli -h redis ping; then
+              echo "Redis is ready"
+              break
+            fi
+            echo "Waiting for Redis..."
+            sleep 2
+          done
+
       - name: Run tests
         run: yarn test
 
