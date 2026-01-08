@@ -1,4 +1,12 @@
-import { Body, Controller, Param, Post, Patch, Request } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Param,
+  Post,
+  Patch,
+  Request,
+  Get,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -69,6 +77,135 @@ export class RideController {
     return await this.rideService.toggleDriverAvailability(userId);
   }
 
+  @Get('active')
+  @ApiOperation({ summary: 'Get active ride' })
+  @ApiResponse({
+    status: 201,
+    description: 'Active ride found',
+    schema: {
+      example: {
+        message: 'Active ride found',
+        data: {
+          ride: {
+            id: '56128cc7-5583-42bf-8889-29e85f824a56',
+            riderId: 'a1a5c43c-957b-40a8-a0d7-e615d99fe7ad',
+            driverId: '40678f34-cd79-4397-9203-47389f1e6243',
+            vehicleId: 'c365d7a5-a714-40e6-859c-c319c30f0cd5',
+            pickupLatitude: '6.514656',
+            pickupLongitude: '3.490738',
+            pickupAddress: 'Third Mainland Bridge',
+            dropoffLatitude: '6.460058',
+            dropoffLongitude: '3.459315',
+            dropoffAddress: 'Banana Island, Eti Osa, Nigeria',
+            startDateTime: '2026-01-04T20:52:50.000Z',
+            endDateTime: null,
+            status: 'PENDING',
+            fare: 1810.63,
+            distance: '8.74',
+            path_json: [],
+            createdAt: '2026-01-04T20:52:50.001Z',
+            updatedAt: '2026-01-04T20:52:50.001Z',
+            driver: {
+              id: '40678f34-cd79-4397-9203-47389f1e6243',
+              userId: 'ee56f65c-c345-4472-81aa-b73ea82f84f7',
+              licenseNumber: null,
+              licensePhoto: null,
+              profilePhoto: null,
+              onboardingCompleted: true,
+              onboardingStep: 3,
+              lastKnownLatitude: '6.49',
+              lastKnownLongitude: '3.4',
+              lastLocationUpdate: '2026-01-04T19:50:51.721Z',
+              lastHeading: null,
+              lastSpeed: null,
+              isOnline: true,
+              createdAt: '2026-01-03T05:43:37.185Z',
+              updatedAt: '2026-01-04T19:50:51.722Z',
+              deletedAt: null,
+              user: {
+                id: 'ee56f65c-c345-4472-81aa-b73ea82f84f7',
+                email: 'tunde.driver@example.com',
+                password:
+                  '$argon2id$v=19$m=65536,t=3,p=1$KfBMypTAymIgSUdPLtMQQQ$c8zJf/tF6uStEg6e1h+9RtKN4S8kq1ArjPPu7Wkcl/Y',
+                role: 'DRIVER',
+                isVerified: true,
+                phone: '+2348022222222',
+                avatar: null,
+                googleId: null,
+                firstName: 'Tunde',
+                dateOfBirth: '2026-01-03T05:43:37.180Z',
+                gender: 'MALE',
+                lastName: 'Bakare',
+                createdAt: '2026-01-03T05:43:37.180Z',
+                updatedAt: '2026-01-04T19:50:51.716Z',
+                deletedAt: null,
+              },
+              vehicle: {
+                id: 'c365d7a5-a714-40e6-859c-c319c30f0cd5',
+                driverId: '40678f34-cd79-4397-9203-47389f1e6243',
+                modelId: 'abcca413-b6ba-4d2d-a987-fcb454a314d6',
+                color: 'SILVER',
+                plateNumber: 'ABC-456-XY',
+                year: 2020,
+                insuranceNumber: 'INS-ABC-456-XY',
+                insuranceCompany: null,
+                exteriorPhoto: 'https://placehold.co/600x400',
+                interiorPhoto: 'https://placehold.co/600x400',
+                isActive: true,
+                createdAt: '2026-01-03T05:43:37.193Z',
+                updatedAt: '2026-01-04T19:50:51.729Z',
+                deletedAt: null,
+                model: {
+                  id: 'abcca413-b6ba-4d2d-a987-fcb454a314d6',
+                  manufacturerId: 'e64941b5-9202-48b5-b6d0-6cda53851317',
+                  name: 'Corolla',
+                  type: 'SEDAN',
+                  seats: 4,
+                  createdAt: '2025-12-19T18:42:18.114Z',
+                  manufacturer: {
+                    id: 'e64941b5-9202-48b5-b6d0-6cda53851317',
+                    name: 'Toyota',
+                    createdAt: '2025-12-19T18:42:18.104Z',
+                  },
+                },
+              },
+            },
+            rider: {
+              id: 'a1a5c43c-957b-40a8-a0d7-e615d99fe7ad',
+              userId: 'deba9200-439a-456d-86f7-960e1e4103a4',
+              createdAt: '2025-12-14T12:03:19.314Z',
+              updatedAt: '2025-12-14T12:03:19.314Z',
+              deletedAt: null,
+              user: {
+                id: 'deba9200-439a-456d-86f7-960e1e4103a4',
+                email: 'test_rider@example.com',
+                password:
+                  '$argon2id$v=19$m=65536,t=3,p=1$5P/OX6h0HGpQky1IKpq4rw$WkoiKkpw9lRjnSLFLHQe/7ByfdqaJBbtccCZZaEr/gM',
+                role: 'RIDER',
+                isVerified: false,
+                phone: '+12345678897',
+                avatar: null,
+                googleId: null,
+                firstName: 'Jeremy',
+                dateOfBirth: '2025-12-19T20:36:49.209Z',
+                gender: 'MALE',
+                lastName: 'Doku',
+                createdAt: '2025-12-14T12:03:19.305Z',
+                updatedAt: '2025-12-14T12:03:19.305Z',
+                deletedAt: null,
+              },
+            },
+          },
+          estiamtedRoadDistance: 10,
+          estimatedFare: 1000,
+        },
+      },
+    },
+  })
+  async getOngoingRide(@Request() req) {
+    const userId = req.user.sub;
+    return this.rideService.getOngoingRide(userId);
+  }
   @Post('request-ride')
   @ApiOperation({ summary: 'Request a ride' })
   @ApiResponse({

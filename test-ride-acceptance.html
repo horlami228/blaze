@@ -220,6 +220,27 @@
           const simBtn = document.getElementById('simulate-btn');
           if (simBtn) simBtn.disabled = false;
 
+          // Check for active ride
+          try {
+            const response = await fetch(
+              'http://localhost:9000/api/v1/ride/active',
+              {
+                headers: { Authorization: `Bearer ${token}` },
+              },
+            );
+            const data = await response.json();
+            console.log('Active Ride Check:', data);
+
+            if (response.ok && data.data) {
+              const ride = data.data;
+              console.log('Restoring active ride:', ride);
+              statusDiv.textContent = `Active Ride Found: ${ride.status}`;
+              renderActiveRide(ride);
+            }
+          } catch (e) {
+            console.error('Failed to check active ride', e);
+          }
+
           const availBtn = document.getElementById('availability-btn');
           if (availBtn) {
             availBtn.disabled = true; // Disable until we know status
@@ -231,9 +252,13 @@
                 },
               );
               const resData = await response.json();
+              console.log('Driver Profile Response:', resData); // DEBUG LOG
+
               if (response.ok) {
                 const isOnline = resData.data.driver.isOnline;
-                if (isOnline) {
+                console.log('Is Driver Online?', isOnline); // DEBUG LOG
+
+                if (isOnline === true) {
                   availBtn.textContent = 'Go Offline';
                   availBtn.style.backgroundColor = '#ef4444'; // Red
                 } else {
@@ -291,6 +316,31 @@
             new Notification('New Ride Request', {
               body: `Pickup: ${ride.pickupAddress}\nFare: ₦${ride.fare}`,
             });
+          }
+        });
+        // Listen for ride-status-update event
+        socket.on('ride-status-update', (ride) => {
+          console.log('Ride status update:', ride);
+
+          if (ride.status === 'CANCELLED') {
+            const container = document.getElementById(`ride-${ride.id}`);
+            if (container) {
+              container.style.opacity = '0.5';
+              if (!container.innerText.includes('🚫 RIDE CANCELED')) {
+                container.insertAdjacentHTML(
+                  'beforeend',
+                  '<p style="color: #ef4444; font-weight: bold; text-align: center; margin-top: 1rem;">🚫 RIDE CANCELED</p>',
+                );
+              }
+              const buttons = container.querySelectorAll('button');
+              buttons.forEach((btn) => {
+                btn.disabled = true;
+                btn.style.cursor = 'not-allowed';
+              });
+              alert(
+                `Ride ${ride.id.substring(0, 8)}... was cancelled by the rider.`,
+              );
+            }
           }
         });
       };
@@ -371,6 +421,8 @@
             const payload = {
               latitude: lat,
               longitude: lng,
+              heading: 45,
+              speed: 60,
             };
 
             console.log('Emitting location:', payload);
@@ -618,6 +670,38 @@
       // Request notification permission
       if (Notification.permission !== 'denied') {
         Notification.requestPermission();
+      }
+
+      function renderActiveRide(ride) {
+        const item = document.createElement('div');
+        item.className = 'ride-item';
+        item.id = `ride-${ride.id}`;
+
+        let actionButtons = '';
+
+        if (ride.status === 'PENDING') {
+          actionButtons = `<button class="accept-btn" onclick="acceptRide('${ride.id}')">Accept Ride</button>`;
+        } else if (ride.status === 'ACCEPTED') {
+          actionButtons = `
+                  <button class="accept-btn start-btn" style="background-color: #ec4899;" onclick="startRide('${ride.id}')">Start Ride</button>
+                  <button class="accept-btn cancel-btn" style="background-color: #ef4444; margin-top: 0.5rem;" onclick="cancelRide('${ride.id}')">Cancel Ride</button>
+              `;
+        } else if (ride.status === 'ONGOING') {
+          actionButtons = `
+                  <button class="accept-btn complete-btn" style="background-color: #3b82f6;" onclick="completeRide('${ride.id}')">Complete Ride</button>
+              `;
+        }
+
+        item.innerHTML = `
+            <h3>🚖 Current Ride (${ride.status})</h3>
+            <p><strong>Pickup:</strong> ${ride.pickupAddress}</p>
+            <p><strong>Dropoff:</strong> ${ride.dropoffAddress}</p>
+            <p><strong>Fare:</strong> ₦${(ride.fare || 0).toLocaleString()}</p>
+            <p><strong>Distance:</strong> ${ride.distance}km</p>
+            ${actionButtons}
+          `;
+
+        logDiv.prepend(item);
       }
     </script>
   </body>

@@ -43,6 +43,16 @@ export class RidesGateway extends BaseGateway {
     await this.rideService.updateDriverLocation(userId, payload);
   }
 
+  @SubscribeMessage('join-ride')
+  async handleJoinRide(
+    @MessageBody() payload: { rideId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const userId = client.data.user.sub;
+    this.logger.info({ userId, rideId: payload.rideId }, 'Joining ride room');
+    await client.join(`ride:${payload.rideId}`);
+  }
+
   sendNotification(
     userId: string,
     notification: { title: string; message: string },
@@ -52,5 +62,25 @@ export class RidesGateway extends BaseGateway {
 
   sendNewRideNotification(userId: string, ride: Ride) {
     this.emitToUser(userId, 'new-ride', ride);
+  }
+
+  emitRideStatusUpdate(ride: Ride) {
+    // Notify both rider and driver
+    this.emitToUser(ride.driverId, 'ride-status-update', ride);
+    this.emitToUser(ride.riderId, 'ride-status-update', ride);
+
+    // Also emit to the ride room if we're using rooms
+    this.server.to(`ride:${ride.id}`).emit('ride-status-update', ride);
+  }
+  emitDriverLocationUpdate(
+    rideId: string,
+    location: {
+      latitude: number;
+      longitude: number;
+      heading?: number;
+      speed?: number;
+    },
+  ) {
+    this.server.to(`ride:${rideId}`).emit('driver-location', location);
   }
 }
