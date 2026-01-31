@@ -3,6 +3,7 @@ import {
   SubscribeMessage,
   MessageBody,
   ConnectedSocket,
+  WsException,
 } from '@nestjs/websockets';
 import { JwtService } from '@nestjs/jwt';
 import { BaseGateway } from 'src/auth/websocket/base.gateway';
@@ -38,9 +39,14 @@ export class RidesGateway extends BaseGateway {
     @MessageBody() payload: UpdateDriverLocationDto,
     @ConnectedSocket() client: Socket,
   ) {
-    const userId = client.data.user.sub;
-    this.logger.info({ userId }, 'Received location update via WebSocket');
-    await this.rideService.updateDriverLocation(userId, payload);
+    try {
+      const userId = client.data.user.sub;
+      this.logger.info({ userId }, 'Received location update via WebSocket');
+      await this.rideService.updateDriverLocation(userId, payload);
+    } catch (error) {
+      this.logger.error(error, 'Error updating location');
+      throw new WsException(error.message || 'Failed to update location');
+    }
   }
 
   @SubscribeMessage('join-ride')
