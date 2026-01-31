@@ -227,6 +227,32 @@ describe('Ride (e2e)', () => {
     it('should not allow rider to request another ride while in one (if we had an ongoing one)', async () => {
       // Since we just completed one, let's try to request another one when we have a PENDING one
 
+      // First, ensure driver is online and available (may have been removed after completing ride)
+      // Toggle may turn driver offline if they were already online, so check response
+      const toggleRes = await request(app.getHttpServer())
+        .patch('/api/v1/ride/toggle-availability')
+        .set('Authorization', `Bearer ${driverToken}`)
+        .expect(200);
+
+      // If toggled to offline, toggle back to online
+      if (toggleRes.body.data.isOnline === false) {
+        await request(app.getHttpServer())
+          .patch('/api/v1/ride/toggle-availability')
+          .set('Authorization', `Bearer ${driverToken}`)
+          .expect(200);
+      }
+
+      await request(app.getHttpServer())
+        .post('/api/v1/ride/update-driver-location')
+        .set('Authorization', `Bearer ${driverToken}`)
+        .send({
+          latitude: 6.45,
+          longitude: 3.4,
+          heading: 0,
+          speed: 0,
+        })
+        .expect(201);
+
       // 1. Request one
       const res1 = await request(app.getHttpServer())
         .post('/api/v1/ride/request-ride')
