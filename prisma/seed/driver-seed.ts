@@ -223,20 +223,20 @@ export async function seedDrivers() {
           const latitude = location[0];
 
           // Add to geospatial index
-          await redisClient.geoadd(
-            'available_drivers',
-            longitude,
-            latitude,
-            driver.id,
-          );
+          // await redisClient.geoadd(
+          //   'available_drivers',
+          //   longitude,
+          //   latitude,
+          //   driver.id,
+          // );
 
           // Store metadata
-          const metadataKey = `driver:${driver.id}:location`;
-          await redisClient.hset(metadataKey, {
-            longitude: longitude,
-            latitude: latitude,
-          });
-          await redisClient.expire(metadataKey, 1000);
+          // const metadataKey = `driver:${driver.id}:location`;
+          // await redisClient.hset(metadataKey, {
+          //   longitude: longitude,
+          //   latitude: latitude,
+          // });
+          // await redisClient.expire(metadataKey, 1000);
 
           console.log(
             `   📍 Updated Redis location for ${profile.firstName} [${latitude}, ${longitude}]`,

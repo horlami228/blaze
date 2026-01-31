@@ -3,6 +3,7 @@ import {
   SubscribeMessage,
   MessageBody,
   ConnectedSocket,
+  WsException,
 } from '@nestjs/websockets';
 import { JwtService } from '@nestjs/jwt';
 import { BaseGateway } from 'src/auth/websocket/base.gateway';
@@ -38,9 +39,24 @@ export class RidesGateway extends BaseGateway {
     @MessageBody() payload: UpdateDriverLocationDto,
     @ConnectedSocket() client: Socket,
   ) {
+    try {
+      const userId = client.data.user.sub;
+      this.logger.info({ userId }, 'Received location update via WebSocket');
+      await this.rideService.updateDriverLocation(userId, payload);
+    } catch (error) {
+      this.logger.error(error, 'Error updating location');
+      throw new WsException(error.message || 'Failed to update location');
+    }
+  }
+
+  @SubscribeMessage('join-ride')
+  async handleJoinRide(
+    @MessageBody() payload: { rideId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
     const userId = client.data.user.sub;
-    this.logger.info({ userId }, 'Received location update via WebSocket');
-    await this.rideService.updateDriverLocation(userId, payload);
+    this.logger.info({ userId, rideId: payload.rideId }, 'Joining ride room');
+    await client.join(`ride:${payload.rideId}`);
   }
 
   sendNotification(
@@ -52,5 +68,25 @@ export class RidesGateway extends BaseGateway {
 
   sendNewRideNotification(userId: string, ride: Ride) {
     this.emitToUser(userId, 'new-ride', ride);
+  }
+
+  emitRideStatusUpdate(ride: Ride) {
+    // Notify both rider and driver
+    this.emitToUser(ride.driverId, 'ride-status-update', ride);
+    this.emitToUser(ride.riderId, 'ride-status-update', ride);
+
+    // Also emit to the ride room if we're using rooms
+    this.server.to(`ride:${ride.id}`).emit('ride-status-update', ride);
+  }
+  emitDriverLocationUpdate(
+    rideId: string,
+    location: {
+      latitude: number;
+      longitude: number;
+      heading?: number;
+      speed?: number;
+    },
+  ) {
+    this.server.to(`ride:${rideId}`).emit('driver-location', location);
   }
 }

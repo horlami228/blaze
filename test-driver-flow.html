@@ -163,26 +163,85 @@
       </div>
 
       <button id="connect-btn">Connect as Driver</button>
-      <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; width: 100%">
-        <button
-          id="simulate-btn"
-          onclick="toggleSimulation()"
-          disabled
-          style="background-color: #64748b; flex: 1"
-        >
-          Start Driving Simulation
-        </button>
-        <button
-          id="availability-btn"
-          onclick="toggleAvailability()"
-          disabled
-          style="background-color: #64748b; flex: 1"
-        >
-          Go Online
-        </button>
-      </div>
-
       <div id="status" class="status disconnected">Disconnected</div>
+
+      <div
+        style="
+          margin-top: 1.5rem;
+          border-top: 1px solid #334155;
+          padding-top: 1rem;
+        "
+      >
+        <h2 style="font-size: 1.1rem; color: #38bdf8; margin-bottom: 1rem">
+          Simulation Settings
+        </h2>
+        <div class="input-group">
+          <label>Start Latitude</label>
+          <input type="number" step="any" id="sim-lat" value="6.5244" />
+        </div>
+        <div class="input-group">
+          <label>Start Longitude</label>
+          <input type="number" step="any" id="sim-lng" value="3.3792" />
+        </div>
+        <div class="input-group">
+          <label>Speed: <span id="speed-display">30</span> km/h</label>
+          <input
+            type="range"
+            id="speed-slider"
+            min="10"
+            max="100"
+            value="30"
+            style="accent-color: #38bdf8"
+            oninput="document.getElementById('speed-display').textContent = this.value"
+          />
+        </div>
+        <div
+          class="input-group"
+          style="display: flex; align-items: center; gap: 8px"
+        >
+          <input
+            type="checkbox"
+            id="auto-heading"
+            checked
+            style="width: auto"
+          />
+          <label style="margin: 0">Auto-steer to Target</label>
+        </div>
+        <div
+          id="sim-status"
+          style="
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-bottom: 0.5rem;
+            padding: 0.5rem;
+            background: #1e293b;
+            border-radius: 0.25rem;
+            display: none;
+          "
+        >
+          Mode: Idle | Speed: 0 km/h | Heading: 0°
+        </div>
+        <div
+          style="display: flex; gap: 0.5rem; margin-top: 0.5rem; width: 100%"
+        >
+          <button
+            id="simulate-btn"
+            onclick="toggleSimulation()"
+            disabled
+            style="background-color: #64748b; flex: 1"
+          >
+            Start Driving Simulation
+          </button>
+          <button
+            id="availability-btn"
+            onclick="toggleAvailability()"
+            disabled
+            style="background-color: #64748b; flex: 1"
+          >
+            Go Online
+          </button>
+        </div>
+      </div>
 
       <div id="rides-log">
         <!-- New rides will appear here -->
@@ -191,6 +250,7 @@
 
     <script>
       let socket;
+      let currentRide = null; // Store active ride globally
       const tokenInput = document.getElementById('token');
       const connectBtn = document.getElementById('connect-btn');
       const statusDiv = document.getElementById('status');
@@ -212,13 +272,35 @@
         });
 
         socket.on('connect', async () => {
-          statusDiv.textContent = 'Connected (Waiting for rides...)';
+          statusDiv.textContent = 'Connected (Checking status...)';
           statusDiv.className = 'status connected';
           console.log('Connected to websocket');
 
           // Enable simulation button
           const simBtn = document.getElementById('simulate-btn');
           if (simBtn) simBtn.disabled = false;
+
+          // Check for active ride
+          try {
+            const response = await fetch(
+              'http://localhost:9000/api/v1/ride/active',
+              {
+                headers: { Authorization: `Bearer ${token}` },
+              },
+            );
+            const data = await response.json();
+            console.log('Active Ride Check:', data);
+
+            if (response.ok && data.data) {
+              const ride = data.data;
+              currentRide = ride; // Store globally
+              console.log('Restoring active ride:', ride);
+              statusDiv.textContent = `Active Ride Found: ${ride.status}`;
+              renderActiveRide(ride);
+            }
+          } catch (e) {
+            console.error('Failed to check active ride', e);
+          }
 
           const availBtn = document.getElementById('availability-btn');
           if (availBtn) {
@@ -231,9 +313,13 @@
                 },
               );
               const resData = await response.json();
+              console.log('Driver Profile Response:', resData); // DEBUG LOG
+
               if (response.ok) {
                 const isOnline = resData.data.driver.isOnline;
-                if (isOnline) {
+                console.log('Is Driver Online?', isOnline); // DEBUG LOG
+
+                if (isOnline === true) {
                   availBtn.textContent = 'Go Offline';
                   availBtn.style.backgroundColor = '#ef4444'; // Red
                 } else {
@@ -259,6 +345,7 @@
           const simBtn = document.getElementById('simulate-btn');
           if (simBtn) simBtn.disabled = true;
           if (simulationInterval) clearInterval(simulationInterval);
+          currentRide = null;
         });
 
         socket.on('connect_error', (err) => {
@@ -270,6 +357,7 @@
         // Listen for new-ride event
         socket.on('new-ride', (ride) => {
           console.log('New Ride Received:', ride);
+          currentRide = ride; // Store globally
 
           const item = document.createElement('div');
           item.className = 'ride-item';
@@ -291,6 +379,40 @@
             new Notification('New Ride Request', {
               body: `Pickup: ${ride.pickupAddress}\nFare: ₦${ride.fare}`,
             });
+          }
+        });
+        // Listen for ride-status-update event
+        socket.on('ride-status-update', (ride) => {
+          console.log('Ride status update:', ride);
+
+          // Update currentRide status if it matches
+          if (currentRide && currentRide.id === ride.id) {
+            currentRide.status = ride.status;
+            if (ride.status === 'CANCELLED' || ride.status === 'COMPLETED') {
+              // Keep it for a moment or clear it?
+              // If cancelled, simulation should probably stop or be aware.
+            }
+          }
+
+          if (ride.status === 'CANCELLED') {
+            const container = document.getElementById(`ride-${ride.id}`);
+            if (container) {
+              container.style.opacity = '0.5';
+              if (!container.innerText.includes('🚫 RIDE CANCELED')) {
+                container.insertAdjacentHTML(
+                  'beforeend',
+                  '<p style="color: #ef4444; font-weight: bold; text-align: center; margin-top: 1rem;">🚫 RIDE CANCELED</p>',
+                );
+              }
+              const buttons = container.querySelectorAll('button');
+              buttons.forEach((btn) => {
+                btn.disabled = true;
+                btn.style.cursor = 'not-allowed';
+              });
+              alert(
+                `Ride ${ride.id.substring(0, 8)}... was cancelled by the rider.`,
+              );
+            }
           }
         });
       };
@@ -342,6 +464,17 @@
         }
       }
 
+      let simLat = null;
+      let simLng = null;
+      let simHeading = 0;
+      let simSpeed = 30;
+
+      // Speed settings for different modes
+      const IDLE_SPEED_MIN = 15;
+      const IDLE_SPEED_MAX = 35;
+      const RIDE_SPEED_MIN = 40;
+      const RIDE_SPEED_MAX = 80;
+
       // Simulate Driving Logic
       function toggleSimulation() {
         if (!socket || !socket.connected) return alert('Connect first!');
@@ -352,30 +485,146 @@
           document.getElementById('simulate-btn').textContent =
             'Start Driving Simulation';
           document.getElementById('simulate-btn').style.backgroundColor =
-            '#38bdf8';
+            '#64748b'; // Back to gray/blue
           console.log('Simulation stopped');
         } else {
           document.getElementById('simulate-btn').textContent =
             'Stop Simulation';
           document.getElementById('simulate-btn').style.backgroundColor =
-            '#ef4444';
+            '#ef4444'; // Red
 
-          let lat = 6.5244; // Example Lagos Lat
-          let lng = 3.3792; // Example Lagos Lng
+          // Initialize coordinates if not already moving
+          if (simLat === null || simLng === null) {
+            simLat = parseFloat(document.getElementById('sim-lat').value);
+            simLng = parseFloat(document.getElementById('sim-lng').value);
+
+            // If ride active, we could optionally teleport to pickup, but let's keep it manual
+            console.log('Starting simulation at:', simLat, simLng);
+          }
+
+          const updateIntervalMs = 1000; // Update every second
+
+          // Show status display
+          document.getElementById('sim-status').style.display = 'block';
 
           simulationInterval = setInterval(() => {
-            // Simulate small movement
-            lat += 0.0001;
-            lng += 0.0001;
+            // Determine if we have an active ride
+            const hasActiveRide =
+              currentRide &&
+              ['PENDING', 'ACCEPTED', 'ONGOING'].includes(currentRide.status);
+            const sliderSpeed = parseInt(
+              document.getElementById('speed-slider').value,
+            );
+
+            // 1. Calculate heading if auto-steer is on
+            const autoSteer = document.getElementById('auto-heading').checked;
+            let mode = 'Idle';
+
+            if (autoSteer && currentRide) {
+              let targetLat, targetLng;
+              if (
+                currentRide.status === 'ACCEPTED' ||
+                currentRide.status === 'PENDING'
+              ) {
+                targetLat = parseFloat(currentRide.pickupLatitude);
+                targetLng = parseFloat(currentRide.pickupLongitude);
+                mode = 'To Pickup';
+              } else if (currentRide.status === 'ONGOING') {
+                targetLat = parseFloat(currentRide.dropoffLatitude);
+                targetLng = parseFloat(currentRide.dropoffLongitude);
+                mode = 'To Dropoff';
+              }
+
+              if (targetLat && targetLng) {
+                // Calculate bearing to target
+                const dy = targetLat - simLat;
+                const dx =
+                  (targetLng - simLng) * Math.cos((simLat * Math.PI) / 180);
+                let bearing = (Math.atan2(dx, dy) * 180) / Math.PI;
+                simHeading = (bearing + 360) % 360;
+              }
+            } else {
+              // Random walk if no target or auto-steer off - slower, gentler turns
+              simHeading += (Math.random() - 0.5) * 10; // Reduced turn rate
+              if (simHeading >= 360) simHeading -= 360;
+              if (simHeading < 0) simHeading += 360;
+            }
+
+            // 2. Calculate speed based on mode
+            if (hasActiveRide) {
+              // Active ride: use slider speed or ride speed range
+              const baseSpeed =
+                sliderSpeed ||
+                RIDE_SPEED_MIN +
+                  Math.random() * (RIDE_SPEED_MAX - RIDE_SPEED_MIN);
+              simSpeed = baseSpeed + (Math.random() - 0.5) * 10;
+              simSpeed = Math.max(
+                RIDE_SPEED_MIN,
+                Math.min(RIDE_SPEED_MAX, simSpeed),
+              );
+            } else {
+              // No ride: idle/cruising - use lower speed from slider
+              const idleBase = Math.min(sliderSpeed, IDLE_SPEED_MAX);
+              simSpeed = idleBase + (Math.random() - 0.5) * 5;
+              simSpeed = Math.max(
+                IDLE_SPEED_MIN,
+                Math.min(IDLE_SPEED_MAX, simSpeed),
+              );
+            }
+
+            // 3. Calculate distance moved
+            const metersMoved =
+              ((simSpeed * 1000) / 3600) * (updateIntervalMs / 1000);
+
+            // 4. Calculate new Lat/Lng
+            const R = 6378137;
+            const dLat =
+              (metersMoved * Math.cos((simHeading * Math.PI) / 180)) / R;
+            const dLng =
+              (metersMoved * Math.sin((simHeading * Math.PI) / 180)) /
+              (R * Math.cos((simLat * Math.PI) / 180));
+
+            simLat += dLat * (180 / Math.PI);
+            simLng += dLng * (180 / Math.PI);
 
             const payload = {
-              latitude: lat,
-              longitude: lng,
+              latitude: simLat,
+              longitude: simLng,
+              heading: simHeading,
+              speed: simSpeed,
             };
 
             console.log('Emitting location:', payload);
             socket.emit('update-location', payload);
-          }, 3000); // Every 3 seconds
+
+            // Update simulation settings inputs to show current position
+            document.getElementById('sim-lat').value = simLat.toFixed(6);
+            document.getElementById('sim-lng').value = simLng.toFixed(6);
+
+            // Update status display
+            document.getElementById('sim-status').innerHTML =
+              `Mode: <strong style="color: ${hasActiveRide ? '#22c55e' : '#fbbf24'}">${mode}</strong> | ` +
+              `Speed: <strong>${simSpeed.toFixed(0)}</strong> km/h | ` +
+              `Heading: <strong>${simHeading.toFixed(0)}</strong>°`;
+          }, updateIntervalMs);
+        }
+      }
+
+      function teleportTo(lat, lng) {
+        simLat = parseFloat(lat);
+        simLng = parseFloat(lng);
+        document.getElementById('sim-lat').value = simLat.toFixed(6);
+        document.getElementById('sim-lng').value = simLng.toFixed(6);
+        console.log('Teleported to:', simLat, simLng);
+
+        // Immediate emit if simulation is running
+        if (simulationInterval && socket && socket.connected) {
+          socket.emit('update-location', {
+            latitude: simLat,
+            longitude: simLng,
+            heading: simHeading,
+            speed: simSpeed,
+          });
         }
       }
 
@@ -618,6 +867,56 @@
       // Request notification permission
       if (Notification.permission !== 'denied') {
         Notification.requestPermission();
+      }
+
+      function renderActiveRide(ride) {
+        const item = document.createElement('div');
+        item.className = 'ride-item';
+        item.id = `ride-${ride.id}`;
+
+        let actionButtons = '';
+
+        if (ride.status === 'PENDING') {
+          actionButtons = `<button class="accept-btn" onclick="acceptRide('${ride.id}')">Accept Ride</button>`;
+        } else if (ride.status === 'ACCEPTED') {
+          actionButtons = `
+                  <button class="accept-btn start-btn" style="background-color: #ec4899;" onclick="startRide('${ride.id}')">Start Ride</button>
+                  <button class="accept-btn cancel-btn" style="background-color: #ef4444; margin-top: 0.5rem;" onclick="cancelRide('${ride.id}')">Cancel Ride</button>
+              `;
+        } else if (ride.status === 'ONGOING') {
+          actionButtons = `
+                  <button class="accept-btn complete-btn" style="background-color: #3b82f6;" onclick="completeRide('${ride.id}')">Complete Ride</button>
+              `;
+        }
+
+        item.innerHTML = `
+            <h3>🚖 Current Ride (${ride.status})</h3>
+            <p><strong>Pickup:</strong> ${ride.pickupAddress}</p>
+            <p><strong>Dropoff:</strong> ${ride.dropoffAddress}</p>
+            <p><strong>Fare:</strong> ₦${(ride.fare || 0).toLocaleString()}</p>
+            <p><strong>Distance:</strong> ${ride.distance}km</p>
+            ${actionButtons}
+          `;
+
+        logDiv.prepend(item);
+
+        // Add Teleport buttons to simulation section if they don't exist
+        let teleportContainer = document.getElementById('teleport-controls');
+        if (!teleportContainer) {
+          teleportContainer = document.createElement('div');
+          teleportContainer.id = 'teleport-controls';
+          teleportContainer.style.marginTop = '0.5rem';
+          teleportContainer.style.display = 'flex';
+          teleportContainer.style.gap = '0.5rem';
+          document
+            .getElementById('availability-btn')
+            .parentElement.after(teleportContainer);
+        }
+
+        teleportContainer.innerHTML = `
+          <button onclick="teleportTo(${ride.pickupLatitude}, ${ride.pickupLongitude})" style="background-color: #f59e0b; font-size: 0.8rem; padding: 0.4rem;">📍 Pickup</button>
+          <button onclick="teleportTo(${ride.dropoffLatitude}, ${ride.dropoffLongitude})" style="background-color: #3b82f6; font-size: 0.8rem; padding: 0.4rem;">🏁 Dropoff</button>
+        `;
       }
     </script>
   </body>

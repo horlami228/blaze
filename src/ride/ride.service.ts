@@ -17,7 +17,7 @@ import { RidesGateway } from './rides.gateway';
 export class RideService {
   private readonly BASE_FARE = 500; // Base fare in your currency
   private readonly PER_KM_RATE = 150; // Rate per kilometer
-  private readonly SEARCH_RADIUS_LEVELS = [3, 5, 10, 15]; // km
+  private readonly SEARCH_RADIUS_LEVELS = [3, 5, 10, 15, 20]; // km
   private readonly FIVE_MINUTES_AGO = new Date(Date.now() - 5 * 60 * 1000);
 
   constructor(
@@ -41,13 +41,22 @@ export class RideService {
       throw new NotFoundException('Driver not found');
     }
 
-    // store in redis geospatial index
-    await this.redis.client.geoadd(
-      'available_drivers',
-      dto.longitude,
-      dto.latitude,
-      driver.id,
-    );
+    // Check if driver has any active ride (ACCEPTED or ONGOING)
+    const busyRide = await this.getActiveRideForDriver(driver.id, [
+      RideStatus.ACCEPTED,
+      RideStatus.ONGOING,
+    ]);
+
+    // Only add to available_drivers if NOT busy
+    if (!busyRide) {
+      // store in redis geospatial index
+      await this.redis.client.geoadd(
+        'available_drivers',
+        dto.longitude,
+        dto.latitude,
+        driver.id,
+      );
+    }
 
     // store metadata and set expiry
 
@@ -134,6 +143,14 @@ export class RideService {
 
       // Set expiry to 1 hour (refreshes on every ping)
       await this.redis.client.expire(pathKey, 3600);
+
+      // Notify rider via WebSocket
+      this.rideGateway.emitDriverLocationUpdate(activeRide.id, {
+        latitude: Number(dto.latitude),
+        longitude: Number(dto.longitude),
+        heading: dto.heading ? Number(dto.heading) : 0,
+        speed: dto.speed ? Number(dto.speed) : 0,
+      });
     }
 
     return {
@@ -372,6 +389,9 @@ export class RideService {
       this.logger.error({ userId }, 'Driver not found');
       throw new NotFoundException('Driver not found');
     }
+
+    this.checkDriverLocationFreshness(driver);
+
     const ride = await this.prisma.ride.findUnique({
       where: { id: rideId },
       include: { driver: true, rider: { include: { user: true } } },
@@ -404,6 +424,11 @@ export class RideService {
       },
     });
 
+    // Remove from available drivers immediately
+    await this.redis.client.zrem('available_drivers', driver.id);
+
+    this.rideGateway.emitRideStatusUpdate(updatedRide);
+
     return {
       message: 'Ride accepted',
       data: updatedRide,
@@ -421,6 +446,8 @@ export class RideService {
     if (!driver) {
       throw new NotFoundException('Driver not found');
     }
+
+    this.checkDriverLocationFreshness(driver);
 
     const ride = await this.prisma.ride.findUnique({
       where: { id: rideId },
@@ -485,6 +512,8 @@ export class RideService {
       },
     });
 
+    this.rideGateway.emitRideStatusUpdate(updatedRide);
+
     return {
       message: 'Ride started',
       data: updatedRide,
@@ -492,30 +521,54 @@ export class RideService {
   }
 
   // cancel a ride
-  //TODO: rider can cancel a ride
   async cancelRide(userId: string, rideId: string) {
-    const driver = await this.prisma.driver.findFirst({
-      where: { userId, deletedAt: null },
-    });
-    if (!driver) {
-      throw new NotFoundException('Driver not found');
+    const [driver, rider] = await Promise.all([
+      this.prisma.driver.findFirst({ where: { userId, deletedAt: null } }),
+      this.prisma.rider.findFirst({ where: { userId, deletedAt: null } }),
+    ]);
+
+    if (!driver && !rider) {
+      throw new NotFoundException('User profile not found');
     }
+
     const ride = await this.prisma.ride.findUnique({
       where: { id: rideId },
     });
     if (!ride) {
       throw new NotFoundException('Ride not found');
     }
-    if (ride.driverId !== driver.id) {
+
+    // Authorization check
+    if (driver && ride.driverId === driver.id) {
+      // Driver can only cancel if ACCEPTED
+      this.checkDriverLocationFreshness(driver);
+
+      if ((ride.status as RideStatus) !== RideStatus.ACCEPTED) {
+        throw new BadRequestException('Ride must be accepted before canceling');
+      }
+    } else if (rider && ride.riderId === rider.id) {
+      // Rider can cancel PENDING or ACCEPTED
+      if (
+        (ride.status as RideStatus) !== RideStatus.PENDING &&
+        (ride.status as RideStatus) !== RideStatus.ACCEPTED
+      ) {
+        throw new BadRequestException('Cannot cancel this ride');
+      }
+    } else {
       throw new BadRequestException('This ride is not assigned to you');
     }
-    if ((ride.status as RideStatus) !== RideStatus.ACCEPTED) {
-      throw new BadRequestException('Ride must be accepted before canceling');
-    }
+
     const updatedRide = await this.prisma.ride.update({
       where: { id: rideId },
       data: { status: RideStatus.CANCELLED },
+      include: {
+        driver: { include: { user: true } }, // Include for notifications if needed later
+        rider: { include: { user: true } },
+      },
     });
+
+    this.rideGateway.emitRideStatusUpdate(updatedRide);
+
     return {
       message: 'Ride canceled',
       data: updatedRide,
@@ -523,7 +576,6 @@ export class RideService {
   }
 
   // complete a ride
-  //TODO: remove the pathkey from the redis
   async completeRide(userId: string, rideId: string) {
     const driver = await this.prisma.driver.findFirst({
       where: { userId, deletedAt: null },
@@ -531,6 +583,9 @@ export class RideService {
     if (!driver) {
       throw new NotFoundException('Driver not found');
     }
+
+    this.checkDriverLocationFreshness(driver);
+
     const ride = await this.prisma.ride.findUnique({
       where: { id: rideId },
     });
@@ -543,13 +598,92 @@ export class RideService {
     if ((ride.status as RideStatus) !== RideStatus.ONGOING) {
       throw new BadRequestException('Ride must be ongoing before completing');
     }
+
+    // --- Flush remaining path points from Redis ---
+    const pathKey = `ride:${rideId}:path`;
+    const lastSavedTsKey = `ride:${rideId}:last_saved_ts`;
+    const lastSavedTs = (await this.redis.client.get(lastSavedTsKey)) || 0;
+
+    // Get all remaining points newer than last saved
+    const remainingPoints = await this.redis.client.zrangebyscore(
+      pathKey,
+      `(${lastSavedTs}`,
+      '+inf',
+    );
+
+    let dbUpdateData: any = {
+      status: RideStatus.COMPLETED,
+      endDateTime: new Date(),
+    };
+
+    if (remainingPoints.length > 0) {
+      const jsonString = `[${remainingPoints.join(',')}]`;
+
+      //append first if there are points.
+      await this.prisma.$executeRaw`
+        UPDATE "Ride" 
+        SET "path_json" = COALESCE("path_json", '[]'::jsonb) || ${jsonString}::jsonb
+        WHERE "id" = ${rideId}
+        `;
+    }
+
     const updatedRide = await this.prisma.ride.update({
       where: { id: rideId },
-      data: { status: RideStatus.COMPLETED, endDateTime: new Date() },
+      data: dbUpdateData,
+      include: {
+        driver: { include: { user: true } },
+        rider: { include: { user: true } },
+      },
     });
+
+    // --- Cleanup Redis Keys ---
+    await this.redis.client.del(pathKey, lastSavedTsKey);
+
+    this.rideGateway.emitRideStatusUpdate(updatedRide);
+
     return {
       message: 'Ride completed',
       data: updatedRide,
+    };
+  }
+
+  // Get active ride for a user (driver or rider)
+  async getOngoingRide(userId: string) {
+    const [rider, driver] = await Promise.all([
+      this.prisma.rider.findFirst({ where: { userId, deletedAt: null } }),
+      this.prisma.driver.findFirst({ where: { userId, deletedAt: null } }),
+    ]);
+
+    if (!rider && !driver) {
+      return null;
+    }
+
+    const ride = await this.prisma.ride.findFirst({
+      where: {
+        OR: [
+          rider ? { riderId: rider.id } : {},
+          driver ? { driverId: driver.id } : {},
+        ],
+        status: {
+          in: [RideStatus.PENDING, RideStatus.ACCEPTED, RideStatus.ONGOING],
+        },
+      },
+      include: {
+        driver: {
+          include: {
+            user: true,
+            vehicle: {
+              include: { model: { include: { manufacturer: true } } },
+            },
+          },
+        },
+        rider: { include: { user: true } },
+      },
+    });
+
+    return {
+      message: 'Ride details',
+      data: ride,
     };
   }
 
@@ -563,6 +697,23 @@ export class RideService {
         },
       },
     });
+  }
+
+  private checkDriverLocationFreshness(driver: Driver) {
+    if (!driver.lastLocationUpdate) {
+      throw new BadRequestException(
+        'Location data unavailable. Please enable GPS.',
+      );
+    }
+
+    const timeDiff = Date.now() - new Date(driver.lastLocationUpdate).getTime();
+    const twoMinutes = 2 * 60 * 1000;
+
+    if (timeDiff > twoMinutes) {
+      throw new BadRequestException(
+        'GPS signal lost. Please update location found.',
+      );
+    }
   }
 
   private calculateDistance(

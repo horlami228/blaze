@@ -42,6 +42,8 @@ describe('RideService', () => {
     get: jest.fn(),
     setex: jest.fn(),
     zadd: jest.fn(),
+    zrem: jest.fn(),
+    del: jest.fn(),
     zremrangebyrank: jest.fn(),
     zcount: jest.fn(),
     zrangebyscore: jest.fn(),
@@ -70,6 +72,8 @@ describe('RideService', () => {
 
   const mockRidesGateway = {
     sendNewRideNotification: jest.fn(),
+    emitDriverLocationUpdate: jest.fn(),
+    emitRideStatusUpdate: jest.fn(),
   };
 
   const mockDriver = {

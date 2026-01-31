@@ -1,0 +1,830 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rider Tester - Request Rides</title>
+
+    <!-- Leaflet CSS -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+      body {
+        font-family:
+          'Inter',
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+        background-color: #0f172a;
+        color: #f8fafc;
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Map Container */
+      #map {
+        width: 100%;
+        height: 50vh;
+        z-index: 1;
+      }
+
+      .main-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .container {
+        background: rgba(30, 41, 59, 0.7);
+        backdrop-filter: blur(10px);
+        padding: 2rem;
+        border-radius: 1rem;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        width: 100%;
+        max-width: 500px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      h1 {
+        font-size: 1.5rem;
+        margin-bottom: 1.5rem;
+        text-align: center;
+        color: #38bdf8;
+      }
+
+      .input-group {
+        margin-bottom: 1rem;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+        color: #94a3b8;
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        border: 1px solid #334155;
+        background: #1e293b;
+        color: white;
+        box-sizing: border-box;
+        outline: none;
+        transition: border-color 0.2s;
+        font-family: inherit;
+      }
+
+      textarea {
+        resize: vertical;
+        min-height: 60px;
+      }
+
+      input:focus,
+      textarea:focus {
+        border-color: #38bdf8;
+      }
+
+      button {
+        width: 100%;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        border: none;
+        background: #38bdf8;
+        color: #0f172a;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s;
+        margin-top: 0.5rem;
+      }
+
+      button:hover:not(:disabled) {
+        background: #0ea5e9;
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .status {
+        margin-top: 1rem;
+        text-align: center;
+        font-size: 0.875rem;
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+      }
+
+      .status.connected {
+        background: rgba(16, 185, 129, 0.2);
+        color: #10b981;
+      }
+
+      .status.disconnected {
+        background: rgba(239, 68, 68, 0.2);
+        color: #ef4444;
+      }
+
+      .status.searching {
+        background: rgba(251, 191, 36, 0.2);
+        color: #fbbf24;
+      }
+
+      #ride-status {
+        margin-top: 1.5rem;
+        padding: 1.5rem;
+        background: #1e293b;
+        border-radius: 0.5rem;
+        border: 1px solid #334155;
+        display: none;
+      }
+
+      #ride-status.active {
+        display: block;
+        animation: fadeIn 0.3s ease-out;
+      }
+
+      .driver-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin: 1rem 0;
+        padding: 1rem;
+        background: rgba(56, 189, 248, 0.1);
+        border-radius: 0.5rem;
+      }
+
+      .driver-avatar {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: #38bdf8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+      }
+
+      .location-ping {
+        background: rgba(34, 197, 94, 0.2);
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+        margin-top: 1rem;
+        font-size: 0.875rem;
+        color: #22c55e;
+        display: none;
+      }
+
+      .location-ping.active {
+        display: block;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+
+      .pulsing {
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      /* Custom marker styles */
+      .driver-marker {
+        background: #3b82f6;
+        width: 30px;
+        height: 30px;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        border: 3px solid white;
+      }
+
+      /* Smooth marker animation */
+      .animated-driver-marker {
+        transition: transform 0.8s ease-out;
+      }
+
+      .leaflet-marker-icon.driver-icon {
+        transition: transform 0.8s ease-out !important;
+      }
+
+      @media (max-width: 768px) {
+        #map {
+          height: 40vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Map Container -->
+    <div id="map"></div>
+    <div
+      style="
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+        background: rgba(15, 23, 42, 0.8);
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid #334155;
+      "
+    >
+      <label
+        style="
+          color: white;
+          font-size: 12px;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+        "
+      >
+        <input type="checkbox" id="follow-driver" checked /> Follow Driver
+      </label>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <div class="container">
+        <h1>🚖 Rider Test Interface</h1>
+
+        <div class="input-group">
+          <label for="token">Rider Auth Token</label>
+          <input
+            type="text"
+            id="token"
+            placeholder="Paste your Rider JWT here"
+          />
+        </div>
+
+        <button id="connect-btn">Connect as Rider</button>
+        <div id="status" class="status disconnected">Disconnected</div>
+
+        <div
+          style="
+            margin-top: 1.5rem;
+            border-top: 1px solid #334155;
+            padding-top: 1.5rem;
+          "
+        >
+          <h2 style="font-size: 1.2rem; color: #fbbf24; margin-bottom: 1rem">
+            Request a Ride
+          </h2>
+
+          <div class="input-group">
+            <label for="pickup-lat">Pickup Latitude</label>
+            <input type="number" step="any" id="pickup-lat" value="6.5244" />
+          </div>
+
+          <div class="input-group">
+            <label for="pickup-lng">Pickup Longitude</label>
+            <input type="number" step="any" id="pickup-lng" value="3.3792" />
+          </div>
+
+          <div class="input-group">
+            <label for="pickup-address">Pickup Address</label>
+            <textarea id="pickup-address">Victoria Island, Lagos</textarea>
+          </div>
+
+          <div class="input-group">
+            <label for="dropoff-lat">Dropoff Latitude</label>
+            <input type="number" step="any" id="dropoff-lat" value="6.4474" />
+          </div>
+
+          <div class="input-group">
+            <label for="dropoff-lng">Dropoff Longitude</label>
+            <input type="number" step="any" id="dropoff-lng" value="3.3903" />
+          </div>
+
+          <div class="input-group">
+            <label for="dropoff-address">Dropoff Address</label>
+            <textarea id="dropoff-address">Lekki Phase 1, Lagos</textarea>
+          </div>
+
+          <button id="request-btn" disabled>Request Ride</button>
+        </div>
+
+        <div id="ride-status">
+          <h3 style="color: #22c55e; margin-top: 0">Active Ride</h3>
+          <div id="ride-details"></div>
+          <div id="location-ping" class="location-ping"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+      // Initialize map centered on Lagos
+      const map = L.map('map').setView([6.5244, 3.3792], 12);
+
+      // Add OpenStreetMap tiles
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+      }).addTo(map);
+
+      // Map markers
+      let pickupMarker = null;
+      let dropoffMarker = null;
+      let driverMarker = null;
+      let routeLine = null;
+
+      // Custom icons
+      const pickupIcon = L.divIcon({
+        html: '<div style="background: #22c55e; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white;"></div>',
+        className: '',
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+      });
+
+      const dropoffIcon = L.divIcon({
+        html: '<div style="background: #ef4444; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white;"></div>',
+        className: '',
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+      });
+
+      const driverIcon = L.divIcon({
+        html: '<div class="animated-driver-marker" style="background: #3b82f6; width: 30px; height: 30px; border-radius: 50%; border: 3px solid white; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: transform 0.8s ease-out;">🚗</div>',
+        className: 'driver-icon',
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+      });
+
+      // Create rotated driver icon based on heading
+      function createDriverIcon(heading) {
+        return L.divIcon({
+          html: `<div class="animated-driver-marker" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); width: 36px; height: 36px; border-radius: 50%; border: 3px solid white; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5); transform: rotate(${heading}deg);">🚕</div>`,
+          className: 'driver-icon',
+          iconSize: [42, 42],
+          iconAnchor: [21, 21],
+        });
+      }
+
+      // Store last known position for smooth animation
+      let lastDriverPosition = null;
+      let driverAnimationFrame = null;
+
+      // Function to update pickup/dropoff markers
+      function updateLocationMarkers() {
+        const pickupLat = parseFloat(
+          document.getElementById('pickup-lat').value,
+        );
+        const pickupLng = parseFloat(
+          document.getElementById('pickup-lng').value,
+        );
+        const dropoffLat = parseFloat(
+          document.getElementById('dropoff-lat').value,
+        );
+        const dropoffLng = parseFloat(
+          document.getElementById('dropoff-lng').value,
+        );
+
+        if (pickupMarker) map.removeLayer(pickupMarker);
+        if (dropoffMarker) map.removeLayer(dropoffMarker);
+        if (routeLine) map.removeLayer(routeLine);
+
+        pickupMarker = L.marker([pickupLat, pickupLng], { icon: pickupIcon })
+          .addTo(map)
+          .bindPopup('🟢 Pickup Location');
+
+        dropoffMarker = L.marker([dropoffLat, dropoffLng], {
+          icon: dropoffIcon,
+        })
+          .addTo(map)
+          .bindPopup('🔴 Dropoff Location');
+
+        // Draw line between pickup and dropoff
+        routeLine = L.polyline(
+          [
+            [pickupLat, pickupLng],
+            [dropoffLat, dropoffLng],
+          ],
+          {
+            color: '#38bdf8',
+            weight: 3,
+            opacity: 0.6,
+            dashArray: '10, 10',
+          },
+        ).addTo(map);
+
+        // Fit map to show both markers
+        const bounds = L.latLngBounds(
+          [pickupLat, pickupLng],
+          [dropoffLat, dropoffLng],
+        );
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+
+      // Update markers when inputs change
+      ['pickup-lat', 'pickup-lng', 'dropoff-lat', 'dropoff-lng'].forEach(
+        (id) => {
+          document
+            .getElementById(id)
+            .addEventListener('change', updateLocationMarkers);
+        },
+      );
+
+      // Initialize markers with default values
+      updateLocationMarkers();
+
+      // Original WebSocket code
+      let socket;
+      let currentRide = null;
+      const tokenInput = document.getElementById('token');
+      const connectBtn = document.getElementById('connect-btn');
+      const requestBtn = document.getElementById('request-btn');
+      const statusDiv = document.getElementById('status');
+      const rideStatusDiv = document.getElementById('ride-status');
+      const rideDetailsDiv = document.getElementById('ride-details');
+      const locationPingDiv = document.getElementById('location-ping');
+
+      connectBtn.onclick = () => {
+        const token = tokenInput.value.trim();
+        if (!token) {
+          alert('Please enter a rider token');
+          return;
+        }
+
+        if (socket) socket.disconnect();
+
+        // Connect to /rides namespace
+        socket = io('http://localhost:9000/rides', {
+          auth: { token },
+          transports: ['websocket'],
+        });
+
+        socket.on('connect', async () => {
+          statusDiv.textContent = 'Connected ✅';
+          statusDiv.className = 'status connected';
+          requestBtn.disabled = false;
+          console.log('Connected to WebSocket');
+
+          // Check for active ride on reconnection
+          try {
+            const response = await fetch(
+              'http://localhost:9000/api/v1/ride/active',
+              {
+                headers: { Authorization: `Bearer ${token}` },
+              },
+            );
+            const data = await response.json();
+            console.log('Active Ride Check:', data);
+
+            if (response.ok && data.data) {
+              currentRide = data.data;
+
+              // Update inputs with active ride data
+              document.getElementById('pickup-lat').value =
+                currentRide.pickupLatitude;
+              document.getElementById('pickup-lng').value =
+                currentRide.pickupLongitude;
+              document.getElementById('pickup-address').value =
+                currentRide.pickupAddress;
+              document.getElementById('dropoff-lat').value =
+                currentRide.dropoffLatitude;
+              document.getElementById('dropoff-lng').value =
+                currentRide.dropoffLongitude;
+              document.getElementById('dropoff-address').value =
+                currentRide.dropoffAddress;
+
+              // Restore UI
+              rideStatusDiv.classList.add('active');
+              const pickup = { address: currentRide.pickupAddress };
+              const dropoff = { address: currentRide.dropoffAddress };
+              renderRideDetails(currentRide, pickup, dropoff);
+
+              // Update map to show current ride locations
+              updateLocationMarkers();
+
+              // RE-JOIN RIDE ROOM
+              console.log('Re-joining ride room:', currentRide.id);
+              socket.emit('join-ride', { rideId: currentRide.id });
+
+              statusDiv.textContent = 'Active ride found! Resuming updates...';
+              requestBtn.textContent = 'Request Another Ride';
+            }
+          } catch (e) {
+            console.error('Failed to check active ride', e);
+          }
+        });
+
+        socket.on('disconnect', () => {
+          statusDiv.textContent = 'Disconnected ❌';
+          statusDiv.className = 'status disconnected';
+          requestBtn.disabled = true;
+        });
+
+        socket.on('connect_error', (err) => {
+          statusDiv.textContent = 'Connection Error: ' + err.message;
+          statusDiv.className = 'status disconnected';
+          console.error('Socket error:', err);
+        });
+
+        // Listen for driver location updates
+        socket.on('driver-location', (data) => {
+          console.log('Driver location update:', data);
+          locationPingDiv.className = 'location-ping active pulsing';
+          locationPingDiv.innerHTML = `
+          📍 Driver Location: ${data.latitude.toFixed(5)}, ${data.longitude.toFixed(5)}<br>
+          🧭 Heading: ${(data.heading || 0).toFixed(0)}°<br>
+          ⚡ Speed: ${(data.speed || 0).toFixed(0)} km/h<br>
+          🕐 ${new Date().toLocaleTimeString()}
+        `;
+
+          const newLat = data.latitude;
+          const newLng = data.longitude;
+          const heading = data.heading || 0;
+
+          // Create marker if doesn't exist
+          if (!driverMarker) {
+            driverMarker = L.marker([newLat, newLng], {
+              icon: createDriverIcon(0),
+            }).addTo(map);
+            driverMarker.bindPopup('🚗 Your Driver');
+            lastDriverPosition = { lat: newLat, lng: newLng };
+          }
+
+          // Get current position
+          const currentPos = driverMarker.getLatLng();
+          const startLat = currentPos.lat;
+          const startLng = currentPos.lng;
+
+          // Cancel any existing animation
+          if (driverAnimationFrame) {
+            cancelAnimationFrame(driverAnimationFrame);
+          }
+
+          // Animate smoothly to new position
+          const duration = 800; // 800ms animation
+          const startTime = performance.now();
+
+          function animateMarker(currentTime) {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            // Ease-out cubic for smooth deceleration
+            const easeProgress = 1 - Math.pow(1 - progress, 3);
+
+            // Interpolate position
+            const lat = startLat + (newLat - startLat) * easeProgress;
+            const lng = startLng + (newLng - startLng) * easeProgress;
+
+            driverMarker.setLatLng([lat, lng]);
+
+            // Update the icon rotation (find the inner div and rotate it)
+            const markerEl = driverMarker.getElement();
+            if (markerEl) {
+              const innerDiv = markerEl.querySelector(
+                '.animated-driver-marker',
+              );
+              if (innerDiv) {
+                innerDiv.style.transform = `rotate(${heading}deg)`;
+              }
+            }
+
+            if (progress < 1) {
+              driverAnimationFrame = requestAnimationFrame(animateMarker);
+            } else {
+              lastDriverPosition = { lat: newLat, lng: newLng };
+            }
+          }
+
+          driverAnimationFrame = requestAnimationFrame(animateMarker);
+
+          // Update route line to include driver position
+          if (pickupMarker && dropoffMarker) {
+            if (routeLine) map.removeLayer(routeLine);
+            const driverPos = [newLat, newLng];
+            const pickupPos = pickupMarker.getLatLng();
+            const dropoffPos = dropoffMarker.getLatLng();
+
+            routeLine = L.polyline(
+              [
+                driverPos,
+                [pickupPos.lat, pickupPos.lng],
+                [dropoffPos.lat, dropoffPos.lng],
+              ],
+              {
+                color: '#3b82f6',
+                weight: 4,
+                opacity: 0.7,
+              },
+            ).addTo(map);
+          }
+
+          // Pan map to driver if "Follow Driver" is checked
+          const followDriver = document.getElementById('follow-driver').checked;
+          if (followDriver) {
+            map.panTo([newLat, newLng], {
+              animate: true,
+              duration: 0.8,
+            });
+          }
+        });
+
+        // Listen for ride status updates
+        socket.on('ride-status-update', (data) => {
+          console.log('Ride status update:', data);
+          alert(`Ride Status: ${data.status}`);
+
+          if (data.status === 'ACCEPTED') {
+            updateRideUI('Driver Accepted! 🎉', '#22c55e');
+          } else if (data.status === 'ONGOING') {
+            updateRideUI('Ride Started! 🚗', '#3b82f6');
+          } else if (data.status === 'COMPLETED') {
+            updateRideUI('Ride Completed! ✅', '#10b981');
+            setTimeout(() => {
+              rideStatusDiv.classList.remove('active');
+              currentRide = null;
+              if (driverMarker) {
+                map.removeLayer(driverMarker);
+                driverMarker = null;
+              }
+            }, 3000);
+          } else if (data.status === 'CANCELLED') {
+            updateRideUI('Ride Cancelled ❌', '#ef4444');
+            setTimeout(() => {
+              rideStatusDiv.classList.remove('active');
+              currentRide = null;
+              if (driverMarker) {
+                map.removeLayer(driverMarker);
+                driverMarker = null;
+              }
+            }, 3000);
+          }
+        });
+      };
+
+      requestBtn.onclick = async () => {
+        const token = tokenInput.value.trim();
+        if (!token) return alert('Token missing');
+
+        const pickup = {
+          latitude: parseFloat(document.getElementById('pickup-lat').value),
+          longitude: parseFloat(document.getElementById('pickup-lng').value),
+          address: document.getElementById('pickup-address').value,
+        };
+
+        const dropoff = {
+          latitude: parseFloat(document.getElementById('dropoff-lat').value),
+          longitude: parseFloat(document.getElementById('dropoff-lng').value),
+          address: document.getElementById('dropoff-address').value,
+        };
+
+        try {
+          requestBtn.textContent = 'Searching for drivers...';
+          statusDiv.textContent = 'Searching for nearby drivers...';
+          statusDiv.className = 'status searching';
+
+          const response = await fetch(
+            'http://localhost:9000/api/v1/ride/request-ride',
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                pickupLatitude: pickup.latitude,
+                pickupLongitude: pickup.longitude,
+                pickupAddress: pickup.address,
+                dropoffLatitude: dropoff.latitude,
+                dropoffLongitude: dropoff.longitude,
+                dropoffAddress: dropoff.address,
+              }),
+            },
+          );
+
+          const data = await response.json();
+
+          if (response.ok) {
+            currentRide = data.data.ride;
+
+            // Show ride details
+            rideStatusDiv.classList.add('active');
+            renderRideDetails(currentRide, pickup, dropoff);
+
+            // Join ride room for location updates
+            socket.emit('join-ride', { rideId: currentRide.id });
+
+            statusDiv.textContent = 'Ride Requested! Waiting for driver...';
+            statusDiv.className = 'status searching';
+            requestBtn.textContent = 'Request Another Ride';
+            requestBtn.disabled = false;
+
+            // Update map markers
+            updateLocationMarkers();
+          } else {
+            alert('Error: ' + (data.message || 'Failed to request ride'));
+            requestBtn.textContent = 'Request Ride';
+            requestBtn.disabled = false;
+            statusDiv.textContent = 'Connected ✅';
+            statusDiv.className = 'status connected';
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Request failed: ' + err.message);
+          requestBtn.textContent = 'Request Ride';
+          requestBtn.disabled = false;
+        }
+      };
+
+      async function cancelCurrentRide() {
+        if (!currentRide) return;
+        const token = tokenInput.value.trim();
+        try {
+          const response = await fetch(
+            `http://localhost:9000/api/v1/ride/cancel-ride/${currentRide.id}`,
+            {
+              method: 'PATCH',
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            },
+          );
+          const data = await response.json();
+          if (response.ok) {
+            alert('Ride Canceled');
+            rideStatusDiv.classList.remove('active');
+            currentRide = null;
+            statusDiv.textContent = 'Ride Canceled. Ready for new ride.';
+            statusDiv.className = 'status connected';
+
+            // Remove driver marker
+            if (driverMarker) {
+              map.removeLayer(driverMarker);
+              driverMarker = null;
+            }
+          } else {
+            alert('Failed to cancel: ' + data.message);
+          }
+        } catch (err) {
+          alert('Error canceling: ' + err.message);
+        }
+      }
+
+      function renderRideDetails(ride, pickup, dropoff) {
+        rideDetailsDiv.innerHTML = `
+            <div class="driver-info">
+              <div class="driver-avatar">👤</div>
+              <div>
+                <strong>${ride.driver.user.firstName} ${ride.driver.user.lastName}</strong><br>
+                <small>${ride.driver.vehicle.model.manufacturer.name} ${ride.driver.vehicle.model.name}</small><br>
+                <small>${ride.driver.vehicle.plateNumber} - ${ride.driver.vehicle.color}</small>
+              </div>
+            </div>
+            <p><strong>Status:</strong> <span style="color: #fbbf24;">${ride.status}</span></p>
+            <p><strong>Fare:</strong> ₦${(ride.fare || 0).toLocaleString()}</p>
+            <p><strong>Distance:</strong> ${ride.distance}km</p>
+            <p><strong>Pickup:</strong> ${pickup.address}</p>
+            <p><strong>Dropoff:</strong> ${dropoff.address}</p>
+            <button onclick="cancelCurrentRide()" style="background-color: #ef4444; margin-top: 1rem;">Cancel Ride</button>
+          `;
+      }
+
+      function updateRideUI(message, color) {
+        const statusElement = rideDetailsDiv.querySelector('p');
+        if (statusElement) {
+          statusElement.innerHTML = `<strong>Status:</strong> <span style="color: ${color};">${message}</span>`;
+        }
+      }
+
+      // Request notification permission
+      if (Notification.permission !== 'denied') {
+        Notification.requestPermission();
+      }
+    </script>
+  </body>
+</html>
